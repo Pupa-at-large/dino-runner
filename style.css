@@ -1,0 +1,257 @@
+:root {
+  --bg: #f7f6f1;
+  --fg: #2c2c2a;
+  --mid: #888780;
+  --line: #d3d1c7;
+  --accent: #534ab7;
+  --surface: #ffffff;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1f1f1d;
+    --fg: #f1efe8;
+    --mid: #888780;
+    --line: #444441;
+    --accent: #afa9ec;
+    --surface: #2c2c2a;
+  }
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body {
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--fg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.4s ease, color 0.4s ease;
+}
+
+#app {
+  width: 100%;
+  max-width: 720px;
+  height: 100%;
+  max-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  padding: env(safe-area-inset-top) 16px env(safe-area-inset-bottom);
+  gap: 12px;
+}
+
+.hud {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 14px;
+  font-family: "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+}
+
+.hud-item { display: flex; flex-direction: column; gap: 2px; }
+.hud-item:last-child { align-items: flex-end; }
+.hud-label { font-size: 11px; letter-spacing: 1px; color: var(--mid); }
+.hud-value { font-size: 18px; font-weight: 600; color: var(--fg); font-variant-numeric: tabular-nums; }
+
+.icon-btn {
+  width: 40px; height: 40px;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: transparent;
+  color: var(--fg);
+  font-size: 16px;
+  cursor: pointer;
+  transition: opacity 0.2s ease, background 0.2s ease;
+}
+.icon-btn.muted { opacity: 0.35; }
+.icon-btn:active { background: var(--line); }
+
+.stage {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  border-radius: 16px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  transition: background 0.4s ease, border-color 0.4s ease;
+}
+
+#game { display: block; width: 100%; height: 100%; }
+
+.overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  text-align: center;
+  padding: 24px;
+  background: color-mix(in srgb, var(--bg) 72%, transparent);
+  backdrop-filter: blur(2px);
+  transition: opacity 0.25s ease;
+}
+.overlay.hidden { opacity: 0; pointer-events: none; }
+.overlay-title { font-size: 28px; font-weight: 700; letter-spacing: -0.5px; }
+.overlay-sub { font-size: 15px; color: var(--fg); }
+.overlay-hint { font-size: 12px; color: var(--mid); margin-top: 4px; }
+
+.controls {
+  display: flex;
+  gap: 12px;
+}
+.ctrl-btn {
+  flex: 1;
+  height: 60px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+  color: var(--fg);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  cursor: pointer;
+  transition: transform 0.05s ease, background 0.15s ease;
+}
+.ctrl-btn:active { transform: scale(0.97); background: var(--line); }
+
+.foot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding-bottom: 10px;
+  font-size: 12px;
+  color: var(--mid);
+}
+.text-btn {
+  border: none;
+  background: transparent;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.foot-sep { opacity: 0.5; }
+
+@media (min-width: 700px) {
+  .ctrl-btn { height: 52px; }
+  .overlay-title { font-size: 34px; }
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .controls { display: none; }
+}
+
+/* ---- Progress bar ---- */
+.progress-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 2px;
+}
+.progress-track {
+  position: relative;
+  flex: 1;
+  height: 8px;
+  background: var(--line);
+  border-radius: 6px;
+  overflow: visible;
+}
+.progress-fill {
+  height: 100%;
+  width: 0%;
+  background: var(--accent);
+  border-radius: 6px;
+  transition: width 0.08s linear;
+}
+.progress-dino {
+  position: absolute;
+  top: 50%;
+  left: 0%;
+  transform: translate(-50%, -50%);
+  font-size: 16px;
+  line-height: 1;
+  transition: left 0.08s linear;
+  pointer-events: none;
+}
+.progress-flag {
+  font-size: 16px;
+  color: var(--mid);
+}
+
+/* ---- Pill buttons in overlays ---- */
+.pill-btn {
+  margin-top: 14px;
+  padding: 10px 22px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--fg);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.05s ease, background 0.15s ease;
+}
+.pill-btn:active { transform: scale(0.97); }
+.pill-btn.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.clear-kicker {
+  font-size: 12px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--accent);
+  font-weight: 700;
+}
+
+/* ---- Level select grid ---- */
+.level-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  margin-top: 16px;
+  width: 100%;
+  max-width: 320px;
+}
+.level-cell {
+  aspect-ratio: 1;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--fg);
+  font-size: 18px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: transform 0.05s ease, background 0.15s ease;
+}
+.level-cell:active { transform: scale(0.95); }
+.level-cell.locked {
+  color: var(--mid);
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.level-cell.cleared {
+  border-color: var(--accent);
+  color: var(--accent);
+}
