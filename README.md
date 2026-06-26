@@ -1,6 +1,6 @@
 # 🦖 Dino Runner
 
-A minimal endless-runner game in pure HTML, CSS, and JavaScript — no frameworks, no build step, no assets. Inspired by Chrome's offline dinosaur game. Works on mobile and desktop.
+A minimal level-based runner game in pure HTML, CSS, and JavaScript — no frameworks, no build step, no assets, no dependencies. Inspired by Chrome's offline dinosaur game. Works on mobile and desktop, and installs as an offline PWA.
 
 [**▶ Play it live**](#) <!-- replace with your GitHub Pages URL -->
 
@@ -8,12 +8,16 @@ A minimal endless-runner game in pure HTML, CSS, and JavaScript — no framework
 
 - **One-tap to play** — tap, click, space, or ↑ to jump; hold / ↓ to duck
 - **Variable jump height** — hold to jump higher, tap for a short hop
-- **Progressive difficulty** — speed ramps up the longer you survive
-- **Ground + flying obstacles** — cacti to jump, pterodactyls to duck under (after 250 pts)
-- **Day / night cycle** — colors invert at score milestones
-- **Persistent high score** — saved locally in your browser
+- **50 hand-authored levels** — each is a designed obstacle score, not random; spacing auto-scales to each level's speed so every level stays fair
+- **Evolve your dino** — clear levels to unlock 10 forms, from a wobbling egg to a Super Dino; pick any unlocked form in **Forms**
+- **Ground + flying obstacles** — cacti to jump, pterodactyls to duck under (or jump over)
+- **Day / night cycle** — colors invert at each level's midpoint
+- **Progress + level select** — a flag-to-flag progress bar and a 50-level picker
+- **Persistent progress** — unlocked levels, best score per level, and chosen form saved locally
 - **Sound toggle** — tiny synthesized blips, no audio files
-- **Responsive + crisp** — DPR-aware canvas, fits any screen, respects safe areas and dark mode
+- **Installable & offline** — PWA manifest + service worker cache the whole app
+- **Accessible** — honors `prefers-reduced-motion` and dark mode; keyboard-navigable
+- **Responsive + crisp** — DPR-aware canvas, fits any screen, respects safe areas
 
 ## Run locally
 
@@ -47,9 +51,12 @@ npx serve .
 
 ```
 dino-runner/
-├── index.html   # markup + HUD
-├── style.css    # mobile-first styles, dark mode
-└── game.js      # game engine (loop, physics, rendering)
+├── index.html     # markup + HUD + overlays
+├── style.css      # mobile-first styles, dark mode, reduced-motion
+├── game.js        # game engine (levels, physics, evolution, rendering)
+├── manifest.json  # PWA metadata
+├── sw.js          # service worker (offline app-shell cache)
+└── icon.svg       # app icon
 ```
 
 ## License

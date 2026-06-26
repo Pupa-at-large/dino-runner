@@ -3,9 +3,13 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
-<meta name="theme-color" content="#f7f6f1" />
+<meta name="theme-color" content="#f7f6f1" media="(prefers-color-scheme: light)" />
+<meta name="theme-color" content="#1f1f1d" media="(prefers-color-scheme: dark)" />
 <meta name="description" content="A minimal level-based runner game — clear each level's finish line to advance. Plays on mobile and desktop." />
 <title>Dino Runner</title>
+<link rel="manifest" href="manifest.json" />
+<link rel="icon" href="icon.svg" type="image/svg+xml" />
+<link rel="apple-touch-icon" href="icon.svg" />
 <link rel="stylesheet" href="style.css" />
 </head>
 <body>
@@ -38,12 +42,15 @@
       <h1 id="ovTitle" class="overlay-title">Dino Runner</h1>
       <p id="ovSub" class="overlay-sub">Tap or press space to start</p>
       <p class="overlay-hint">Tap / space / ↑ to jump · hold / ↓ to duck</p>
-      <button id="levelSelectBtn" class="pill-btn">Select level</button>
+      <div class="overlay-actions">
+        <button id="levelSelectBtn" class="pill-btn">Select level</button>
+        <button id="skinsBtn" class="pill-btn">Forms</button>
+      </div>
     </div>
 
     <!-- Level clear overlay -->
     <div id="clearOverlay" class="overlay hidden">
-      <p class="clear-kicker">Level cleared</p>
+      <p id="clearKicker" class="clear-kicker">Level cleared</p>
       <h1 id="clearTitle" class="overlay-title">Level 1</h1>
       <p id="clearStats" class="overlay-sub">Score 00420 · Best 00500</p>
       <button id="nextBtn" class="pill-btn primary">Next level →</button>
@@ -55,6 +62,14 @@
       <p class="overlay-sub">Cleared levels are unlocked</p>
       <div id="levelGrid" class="level-grid"></div>
       <button id="selectBackBtn" class="text-btn">Back</button>
+    </div>
+
+    <!-- Skins / evolution overlay -->
+    <div id="skinOverlay" class="overlay hidden">
+      <h1 class="overlay-title">Forms</h1>
+      <p class="overlay-sub">Clear levels to evolve · tap to wear</p>
+      <div id="skinGrid" class="skin-grid"></div>
+      <button id="skinBackBtn" class="text-btn">Back</button>
     </div>
   </div>
 
@@ -71,5 +86,14 @@
 </div>
 
 <script src="game.js"></script>
+<script>
+  // Register the service worker for offline play. Skipped on file:// where SWs
+  // are unavailable; harmless if the file is missing.
+  if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
+    window.addEventListener("load", function () {
+      navigator.serviceWorker.register("sw.js").catch(function () {});
+    });
+  }
+</script>
 </body>
 </html>

@@ -255,3 +255,69 @@ body {
   border-color: var(--accent);
   color: var(--accent);
 }
+
+/* 50 levels — let the grid scroll inside the overlay */
+.level-grid {
+  max-height: 52vh;
+  overflow-y: auto;
+  padding: 2px;
+  scrollbar-width: thin;
+}
+
+/* ---- Overlay action row ---- */
+.overlay-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+/* ---- Skin / evolution grid ---- */
+.skin-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+  margin-top: 14px;
+  width: 100%;
+  max-width: 320px;
+  max-height: 52vh;
+  overflow-y: auto;
+  padding: 2px;
+  scrollbar-width: thin;
+}
+.skin-cell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--fg);
+  cursor: pointer;
+  text-align: left;
+  transition: transform 0.05s ease, background 0.15s ease, border-color 0.15s ease;
+}
+.skin-cell:active { transform: scale(0.96); }
+.skin-cell.active { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, var(--surface)); }
+.skin-cell.locked { opacity: 0.5; cursor: not-allowed; }
+.skin-emoji { font-size: 22px; line-height: 1; }
+.skin-name { font-size: 12px; font-weight: 600; }
+.skin-cell.locked .skin-name { color: var(--mid); }
+
+/* ---- Keyboard focus visibility (a11y) ---- */
+.pill-btn:focus-visible,
+.text-btn:focus-visible,
+.icon-btn:focus-visible,
+.ctrl-btn:focus-visible,
+.level-cell:focus-visible,
+.skin-cell:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ---- Respect reduced-motion preference ---- */
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; }
+  .progress-fill, .progress-dino { transition: none !important; }
+}
