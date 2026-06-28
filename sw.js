@@ -1,6 +1,6 @@
 /* Dino Runner service worker — offline-first app shell cache.
    Bump CACHE when any shell file changes so clients pick up the new version. */
-const CACHE = "dino-runner-v1";
+const CACHE = "dino-runner-v2";
 const SHELL = [
   "./",
   "index.html",
@@ -8,6 +8,9 @@ const SHELL = [
   "game.js",
   "manifest.json",
   "icon.svg",
+  "fonts/space-grotesk.woff2",
+  "fonts/space-mono-400.woff2",
+  "fonts/space-mono-700.woff2",
 ];
 
 self.addEventListener("install", (e) => {

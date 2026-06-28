@@ -29,6 +29,11 @@
   const skinGrid = document.getElementById("skinGrid");
   const skinBackBtn = document.getElementById("skinBackBtn");
 
+  const pauseBtn = document.getElementById("pauseBtn");
+  const pauseOverlay = document.getElementById("pauseOverlay");
+  const pauseStats = document.getElementById("pauseStats");
+  const settingsOverlay = document.getElementById("settingsOverlay");
+
   const progressFill = document.getElementById("progressFill");
   const progressDino = document.getElementById("progressDino");
 
@@ -115,11 +120,11 @@
 
   // Footprint (world width) of each obstacle, used to advance the cursor.
   function obstacleFootprint(type) {
-    if (type === "3") return 57;
-    if (type === "2") return 38;
-    if (type === "C") return 20;
-    if (type === "b") return 40;
-    return 14; // c
+    if (type === "3") return 78;
+    if (type === "2") return 52;
+    if (type === "C") return 30;  // tall cactus (needs a double jump)
+    if (type === "b") return 52;
+    return 26; // c
   }
 
   // Expand a pattern string into an ordered schedule of {at, ...} entries plus
@@ -127,18 +132,22 @@
   // dino covers during a held jump at this level's top speed — so spacing is
   // speed-invariant and always clearable.
   function buildSchedule(pattern, maxSpeed) {
-    const u = 40 * maxSpeed;        // ~ max airtime (frames) * speed
+    const u = 44 * maxSpeed;        // ~ airtime (frames) * speed, sized for jumps
     const BASE_GAP = 1.0 * u;       // implicit land-and-rejump gap
     let cursor = 360;               // lead-in before first obstacle
     const items = [];
     for (const ch of pattern) {
       if (ch === " ") continue;
-      else if (ch === ".") cursor += 0.28 * u;
-      else if (ch === "-") cursor += 0.6 * u;
+      else if (ch === ".") cursor += 0.30 * u;
+      else if (ch === "-") cursor += 0.62 * u;
       else if (ch === "~") cursor += 1.2 * u;
       else {
+        // Tall cacti need a double jump: isolate them so the player always has
+        // room to set it up (before) and recover from its long airtime (after),
+        // regardless of the spacer the pattern authored around them.
+        if (ch === "C") cursor += 0.7 * u;
         items.push(makeScheduleItem(ch, cursor));
-        cursor += obstacleFootprint(ch) + BASE_GAP;
+        cursor += obstacleFootprint(ch) + BASE_GAP + (ch === "C" ? 0.9 * u : 0);
       }
     }
     return { items, goal: cursor + 360 };
@@ -146,10 +155,10 @@
 
   function makeScheduleItem(ch, at) {
     if (ch === "b") return { at, type: "bird" };
-    if (ch === "C") return { at, type: "cactus", big: true, cluster: 1 };
-    if (ch === "2") return { at, type: "cactus", big: false, cluster: 2 };
-    if (ch === "3") return { at, type: "cactus", big: false, cluster: 3 };
-    return { at, type: "cactus", big: false, cluster: 1 }; // c
+    if (ch === "C") return { at, type: "cactus", variant: "tall", cluster: 1 };
+    if (ch === "2") return { at, type: "cactus", variant: "cluster", cluster: 2 };
+    if (ch === "3") return { at, type: "cactus", variant: "cluster", cluster: 3 };
+    return { at, type: "cactus", variant: "small", cluster: 1 }; // c
   }
 
   // ---- Logical resolution ----
@@ -159,31 +168,43 @@
   let GROUND = BASE_H - GROUND_OFFSET;
   let scale = 1, dpr = 1;
 
-  // ---- Theme ----
+  // ---- Theme (DESIGN_SPEC §1) ----
+  // Only bg and ink flip between day/night; accent + secondary are constant.
+  // The OS dark-mode setting chooses the *starting* phase; `night` flips it.
+  const C_LIGHT_BG = "#F4F3F0", C_DARK_BG = "#16161A";
+  const C_LIGHT_INK = "#1A1A1A", C_DARK_INK = "#F1EFE9";
+  const C_LIGHT_SEC = "#B8B5AD", C_DARK_SEC = "#4A4A52";
+  const C_ACCENT = "#E8552D";
   function theme() {
-    const dark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-    const light = { fg: "#2c2c2a", bg: "#f7f6f1", mid: "#888780", line: "#d3d1c7", accent: "#534ab7" };
-    const dk = { fg: "#f1efe8", bg: "#1f1f1d", mid: "#888780", line: "#444441", accent: "#afa9ec" };
-    const base = dark ? dk : light;
-    if (!night) return base;
-    return dark
-      ? { fg: "#1f1f1d", bg: "#f1efe8", mid: "#888780", line: "#d3d1c7", accent: "#534ab7" }
-      : { fg: "#f7f6f1", bg: "#2c2c2a", mid: "#888780", line: "#5f5e5a", accent: "#afa9ec" };
+    const osDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+    const startLight = !osDark;
+    const isLight = night ? !startLight : startLight;
+    const bg = isLight ? C_LIGHT_BG : C_DARK_BG;
+    const ink = isLight ? C_LIGHT_INK : C_DARK_INK;
+    const sec = isLight ? C_LIGHT_SEC : C_DARK_SEC;
+    // fg/bg/mid/line kept for existing draw code; hot=accent ornaments, eye=bg.
+    return { fg: ink, bg, mid: sec, line: sec, accent: C_ACCENT, hot: C_ACCENT, eye: bg, ink, secondary: sec };
   }
 
   // ---- State ----
-  const GRAV = 0.62, JUMP_V = -11.5, MAX_FALL = 16;
-  const dino = { x: 64, y: 0, vy: 0, ducking: false, onGround: true };
-  let obstacles = [], clouds = [], particles = [];
-  let speed, dist, score, night = false, flashT = 0, holdingJump = false;
+  // Double-jump model (DESIGN_SPEC §6): first tap jumps, a second mid-air tap
+  // adds height. Tall cacti require the double jump; small ones don't.
+  const GRAV = 0.62, JUMP_V = -11.5, JUMP_V2 = -10.6, MAX_FALL = 16;
+  const MILESTONE = 1200;   // world distance between day/night flips
+  const dino = { x: 64, y: 0, vy: 0, ducking: false, onGround: true, crashed: false, jumps: 0 };
+  let obstacles = [], clouds = [], particles = [], pops = [];
+  let speed, dist, score, night = false, flashT = 0;
+  let invertT = 0, pulseT = 0, toastT = 0, toastText = "", lastMilestone = 0;
   let level = 1, cfg = levelConfig(1);
   let goal = 2200, schedule = [], schedIdx = 0;
   let state = "ready";
   let legTick = 0, finishSpawned = false, midPlayed = false;
 
-  // Honour the OS "reduce motion" preference: fewer particles, no strobe.
+  // Honour the OS "reduce motion" preference (overridable in Settings): fewer
+  // particles, no strobe.
   const reduceMotionMQ = window.matchMedia("(prefers-reduced-motion: reduce)");
   let reduceMotion = reduceMotionMQ.matches;
+  try { const m = localStorage.getItem("dino_motion"); if (m === "reduce") reduceMotion = true; else if (m === "full") reduceMotion = false; } catch (e) {}
 
   // ---- Persistence ----
   let unlocked = 1, bestByLevel = {}, chosenSkin = null; // chosenSkin null = always newest
@@ -243,9 +264,10 @@
     const built = buildSchedule(LEVEL_PATTERNS[n - 1] || "c ~ c ~ c", cfg.maxSpeed);
     schedule = built.items; goal = built.goal; schedIdx = 0;
     obstacles = []; clouds = []; particles = [];
-    speed = cfg.startSpeed; dist = 0; score = 0;
+    speed = cfg.startSpeed; dist = 0; score = 0; pops = [];
     night = false; flashT = 0; finishSpawned = false; midPlayed = false;
-    dino.ducking = false; placeDinoGround();
+    invertT = 0; pulseT = 0; toastT = 0; lastMilestone = 0;
+    dino.ducking = false; dino.crashed = false; dino.jumps = 0; placeDinoGround();
     for (let i = 0; i < 3; i++) clouds.push({ x: Math.random() * BASE_W, y: 24 + Math.random() * 60, s: 0.3 + Math.random() * 0.5 });
     levelEl.textContent = String(n);
     updateProgress();
@@ -279,25 +301,52 @@
   }
   function failLevel() {
     state = "over";
+    dino.crashed = true;
     ovTitle.textContent = "Level " + level + " \u2014 try again";
     ovSub.textContent = "Tap or space to retry";
     showOverlay(overlay);
     flashT = reduceMotion ? 0 : 8;
     blip(150, 0.2, "sawtooth");
   }
+  function pauseGame() {
+    if (state !== "play") return;
+    state = "paused";
+    pauseStats.textContent = "Score " + String(Math.floor(score)).padStart(5, "0");
+    showOverlay(pauseOverlay);
+  }
+  function resumeGame() {
+    if (state !== "paused") return;
+    state = "play";
+    hideAllOverlays();
+  }
+  function goHome() {
+    state = "ready";
+    loadLevel(level);
+    ovTitle.textContent = "Dino Runner";
+    ovSub.textContent = "Tap or press space to start";
+    showOverlay(overlay);
+    render();
+  }
 
   // ---- Overlay helpers ----
-  function hideAllOverlays() { [overlay, clearOverlay, selectOverlay, skinOverlay].forEach(o => o.classList.add("hidden")); }
+  function hideAllOverlays() { [overlay, clearOverlay, selectOverlay, skinOverlay, pauseOverlay, settingsOverlay].forEach(o => o.classList.add("hidden")); }
   function showOverlay(el) { hideAllOverlays(); el.classList.remove("hidden"); }
 
   // ---- Input ----
   function jump() {
     if (state === "ready" || state === "over") { startLevel(level); return; }
-    if (state === "clear" || state === "select" || state === "skins") return;
-    if (dino.onGround) { dino.vy = JUMP_V; dino.onGround = false; holdingJump = true; blip(660, 0.06); }
+    if (state === "paused") { resumeGame(); return; }
+    if (state !== "play") return; // clear / select / skins / settings
+    if (dino.onGround) {
+      dino.vy = JUMP_V; dino.onGround = false; dino.jumps = 1; dino.ducking = false;
+      blip(660, 0.06); puff();
+    } else if (dino.jumps === 1) {
+      dino.vy = JUMP_V2; dino.jumps = 2;           // double jump — extra height
+      blip(880, 0.06); jumpArc();
+    }
   }
-  function releaseJump() { holdingJump = false; }
-  function setDuck(v) { if (state === "play") dino.ducking = v; }
+  function releaseJump() { /* no-op: height now comes from the double jump */ }
+  function setDuck(v) { if (state === "play" && dino.onGround) dino.ducking = v; }
 
   // ---- Spawning ----
   // Pull scheduled obstacles onto the stage as their world position reaches the
@@ -309,13 +358,17 @@
       const it = schedule[schedIdx++];
       const x = dino.x + (it.at - dist);
       if (it.type === "bird") {
-        // One duck-height lane: clears a ducking dino, blocks a standing one,
+        // One duck-height band: clears a ducking dino, blocks a standing one,
         // and can also be jumped over.
-        obstacles.push({ type: "bird", x, y: GROUND - 30, w: 40, h: 22, wing: 0 });
+        obstacles.push({ type: "bird", x, y: GROUND - 30, w: 52, h: 34, wing: 0 });
+      } else if (it.variant === "tall") {
+        obstacles.push({ type: "cactus", variant: "tall", cluster: 1, x, y: GROUND, w: 30, h: 132 });
+      } else if (it.variant === "cluster") {
+        const n = it.cluster;
+        obstacles.push({ type: "cactus", variant: "cluster", cluster: n, x, y: GROUND, w: n * 26, h: 48 });
       } else {
-        const big = it.big, cluster = it.cluster;
-        obstacles.push({ type: "cactus", x, y: GROUND, big, cluster,
-          w: (big ? 18 : 13) * cluster + (cluster - 1) * 8, h: big ? 46 : 32 });
+        // small — occasionally drawn as the bushier variant for variety
+        obstacles.push({ type: "cactus", variant: "small", cluster: 1, x, y: GROUND, w: 28, h: 48, bush: Math.random() < 0.3 });
       }
     }
   }
@@ -326,9 +379,21 @@
     score += speed * 0.08;
     if (speed < cfg.maxSpeed) speed += cfg.accel;
 
-    const wasNight = night;
-    night = Math.floor(dist / (goal / 2)) % 2 === 1;
-    if (night && !wasNight && !midPlayed) { midPlayed = true; blip(392, 0.1, "sine"); }
+    // Day/night every MILESTONE units: invert + accent pulse + speed surge
+    // (capped at the level's maxSpeed so authored spacing stays passable).
+    const ms = Math.floor(dist / MILESTONE);
+    if (ms > lastMilestone) {
+      lastMilestone = ms;
+      night = ms % 2 === 1;
+      speed = Math.min(speed + 0.8, cfg.maxSpeed);
+      invertT = reduceMotion ? 0 : 9;
+      pulseT = reduceMotion ? 0 : 26;
+      toastText = night ? "☾ NIGHT" : "☀ DAY";
+      toastT = 80;
+      blip(523, 0.12, "sine"); blip(784, 0.12, "sine");
+    } else {
+      night = ms % 2 === 1;
+    }
 
     const remaining = goal - dist;
     if (!finishSpawned && remaining <= BASE_W + 200) {
@@ -336,24 +401,37 @@
       obstacles.push({ type: "finish", x: BASE_W + 24, y: GROUND, w: 8, h: 80 });
     }
 
-    let g = GRAV;
-    if (holdingJump && dino.vy < 0) g = GRAV * 0.5;
-    dino.vy = Math.min(dino.vy + g, MAX_FALL);
+    dino.vy = Math.min(dino.vy + GRAV, MAX_FALL);
     dino.y += dino.vy;
-    if (dino.y >= GROUND) { dino.y = GROUND; dino.vy = 0; if (!dino.onGround) { dino.onGround = true; puff(); } }
+    if (dino.y >= GROUND) { dino.y = GROUND; dino.vy = 0; if (!dino.onGround) { dino.onGround = true; dino.jumps = 0; puff(); } }
 
+    // Hitbox scales with the active form (DESIGN_SPEC §8).
     const duck = dino.ducking && dino.onGround;
-    dino.w = duck ? 58 : 44;
-    dino.h = duck ? 26 : 48;
+    const unit = PXU * formScale(), bw = 96 * unit, bh = 100 * unit;
+    dino.w = duck ? bw * 0.70 : bw * 0.60;
+    dino.h = duck ? bh * 0.32 : bh * 0.66;
 
     if (!finishSpawned) spawnDue();
 
-    for (const o of obstacles) { o.x -= speed; if (o.type === "bird") o.wing = (o.wing + 0.18) % 2; }
+    for (const o of obstacles) {
+      o.x -= speed;
+      if (o.type === "bird") o.wing = (o.wing + 0.18) % 2;
+      // +score pop when an obstacle is cleared (passes behind the dino)
+      if (!o.scored && o.type !== "finish" && o.x + o.w < dino.x) { o.scored = true; scorePop(); }
+    }
     obstacles = obstacles.filter(o => o.x + o.w > -10);
 
+    // Jump-arc trail (DESIGN_SPEC §4): accent dots along the parabola.
+    if (!dino.onGround && !reduceMotion) particles.push({ kind: "dot", x: dino.x + dino.w * 0.5, y: dino.y - dino.h * 0.5, vx: -speed * 0.4, vy: 0, r: 3, life: 16, max: 16 });
+
     for (const c of clouds) { c.x -= c.s * 1.1; if (c.x < -60) { c.x = BASE_W + 30; c.y = 24 + Math.random() * 60; } }
-    for (const p of particles) { p.x += p.vx; p.y += p.vy; p.vy += 0.3; p.life--; }
+    for (const p of particles) {
+      p.x += p.vx; p.y += p.vy; p.life--;
+      if (p.kind === "dust") { p.vy += 0.18; p.r += p.vr || 0; }
+    }
     particles = particles.filter(p => p.life > 0);
+    for (const sp of pops) { sp.y += sp.vy; sp.life--; }
+    pops = pops.filter(sp => sp.life > 0);
 
     const box = { x: dino.x, y: dino.y, w: dino.w, h: dino.h };
     for (const o of obstacles) {
@@ -370,6 +448,9 @@
 
     legTick += speed * 0.06;
     if (flashT > 0) flashT--;
+    if (invertT > 0) invertT--;
+    if (pulseT > 0) pulseT--;
+    if (toastT > 0) toastT--;
     updateProgress();
   }
 
@@ -379,112 +460,44 @@
     progressDino.style.left = pct + "%";
   }
 
+  // Dust: 3 fading secondary circles at the takeoff/landing foot (DESIGN_SPEC §4).
   function puff() {
     if (reduceMotion) return;
-    for (let i = 0; i < 5; i++)
-      particles.push({ x: dino.x + 8, y: GROUND, vx: -Math.random() * 2 - 0.5, vy: -Math.random() * 1.5, life: 14 + Math.random() * 8 });
+    for (let i = 0; i < 3; i++)
+      particles.push({ kind: "dust", x: dino.x + 6 + i * 5, y: GROUND - 2, r: 5 - i, vr: 0.35, vx: -1 - Math.random(), vy: -0.5, life: 16 + i * 3, max: 16 + i * 3 });
+  }
+  // A small accent burst on the double jump; the continuous trail is in update().
+  function jumpArc() {
+    if (reduceMotion) return;
+    for (let i = 0; i < 4; i++)
+      particles.push({ kind: "dot", x: dino.x + dino.w * 0.5, y: dino.y - dino.h * 0.6 - i * 4, vx: -speed * 0.3, vy: 0, r: 3, life: 18, max: 18 });
+  }
+  // "+N" score pop floating up in accent (DESIGN_SPEC §4).
+  function scorePop() {
+    if (reduceMotion) return;
+    pops.push({ x: dino.x + dino.w + 6, y: dino.y - dino.h - 6, vy: -0.9, life: 36, max: 36 });
   }
 
-  // ---- Draw: evolution ladder ----
-  // Each level milestone (every 5 levels) unlocks a fancier form. All forms are
-  // drawn from fillRect primitives in the current theme colours, so dark mode
-  // and the in-level night inversion still "just work". Cosmetic only — the
-  // collision box (set in update) never changes with skin, to keep play fair.
+  // ---- Draw: evolution ladder (DESIGN_SPEC §8) ----
+  // Each milestone (every 5 levels) unlocks a fancier form, drawn from flat
+  // geometry (rounded rects + triangles) in a 96×100 coordinate box. Body =
+  // currentColor (ink), accent parts = --hot, eye = bg — so dark mode + the
+  // day/night invert "just work". Scale ramps .58→1.18 and the HITBOX scales
+  // with it (per the spec / chosen mechanics).
+  const PXU = 0.78; // px per box-unit at scale 1
 
-  function eggBody(c, cx, bottomY, w, h) {
-    ctx.fillStyle = c.fg;
-    const x = cx - w / 2;
-    ctx.fillRect(x + w * 0.18, bottomY - h, w * 0.64, h);            // top column
-    ctx.fillRect(x + w * 0.06, bottomY - h * 0.78, w * 0.88, h * 0.74);
-    ctx.fillRect(x, bottomY - h * 0.5, w, h * 0.5);                  // wide base
-  }
-  function eye(c, ex, ey, sz, color) { ctx.fillStyle = color || c.bg; ctx.fillRect(ex, ey, sz, sz); }
-  function eggCrack(c, cx, bottomY, w, h) {
-    ctx.fillStyle = c.bg;
-    const x = cx - w / 2, my = bottomY - h * 0.55;
-    ctx.fillRect(x + w * 0.20, my, w * 0.14, 3);
-    ctx.fillRect(x + w * 0.33, my - 4, w * 0.14, 3);
-    ctx.fillRect(x + w * 0.47, my, w * 0.14, 3);
-    ctx.fillRect(x + w * 0.61, my - 4, w * 0.16, 3);
-  }
-  function stubbyLegs(c, cx, bottomY, step) {
-    ctx.fillStyle = c.fg;
-    ctx.fillRect(cx - 8, bottomY - (step ? 7 : 4), 5, step ? 7 : 4);
-    ctx.fillRect(cx + 3, bottomY - (step ? 4 : 7), 5, step ? 4 : 7);
-  }
-
-  // The bipedal dino silhouette, parameterised for the grown-up stages.
-  function dinoForm(c, opt) {
-    const x = dino.x, baseY = dino.y;
-    const duck = dino.ducking && dino.onGround;
-    const step = Math.floor(legTick) % 2 === 0;
-    const s = opt.scale || 1;
-    ctx.fillStyle = c.fg;
-    if (duck) {
-      ctx.fillRect(x, baseY - 22, 48, 18);
-      ctx.fillRect(x + 42, baseY - 28, 18, 15);
-      eye(c, x + 51, baseY - 25, 4);
-      ctx.fillStyle = c.fg;
-      ctx.fillRect(x + 8, baseY - 5, 6, 5);
-      ctx.fillRect(x + 26, baseY - 5, 6, step ? 5 : 3);
-      if (opt.spikes) for (let i = 0; i < opt.spikes; i++) ctx.fillRect(x + 6 + i * 8, baseY - 26, 5, 5);
-      return;
-    }
-    const top = baseY - 48 * s;
-    ctx.fillRect(x, top, 26 * s, 30 * s);            // body
-    ctx.fillRect(x + 20 * s, top - 6 * s, 24 * s, 22 * s); // head
-    ctx.fillRect(x - 7 * s, baseY - 30 * s, 9 * s, 6 * s); // tail
-    if (dino.onGround) {
-      ctx.fillRect(x + 4 * s, baseY - 18 * s, 8 * s, (step ? 18 : 13) * s);
-      ctx.fillRect(x + 16 * s, baseY - 18 * s, 8 * s, (step ? 13 : 18) * s);
-    } else {
-      ctx.fillRect(x + 4 * s, baseY - 18 * s, 8 * s, 13 * s);
-      ctx.fillRect(x + 16 * s, baseY - 14 * s, 8 * s, 13 * s);
-    }
-    if (opt.spikes) {
-      ctx.fillStyle = c.fg;
-      for (let i = 0; i < opt.spikes; i++) ctx.fillRect(x + 2 * s + i * 7 * s, top - 5 * s - (i % 2) * 2, 5 * s, 6 * s);
-    }
-    if (opt.horn) { ctx.fillStyle = c.fg; ctx.fillRect(x + 40 * s, top - 13 * s, 5 * s, 9 * s); }
-    eye(c, x + 35 * s, top, 5 * s, opt.accent ? c.accent : c.bg);
-  }
-
+  // 10 forms. kind: egg | hatch | dino. orn flags for the dino base.
   const EVOLUTIONS = [
-    { name: "Egg",         from: 1,  emoji: "🥚", draw(c) {
-        const x = dino.x, b = dino.y, duck = dino.ducking && dino.onGround;
-        if (duck) { eggBody(c, x + 17, b, 46, 26); eye(c, x + 30, b - 16, 4); return; }
-        eggBody(c, x + 17, b, 32, 42); eye(c, x + 24, b - 30, 4);
-      } },
-    { name: "Cracked Egg", from: 6,  emoji: "🥚", draw(c) {
-        const x = dino.x, b = dino.y, duck = dino.ducking && dino.onGround;
-        if (duck) { eggBody(c, x + 17, b, 46, 26); eggCrack(c, x + 17, b, 46, 26); eye(c, x + 30, b - 16, 4); return; }
-        eggBody(c, x + 17, b, 32, 42); eggCrack(c, x + 17, b, 32, 42); eye(c, x + 24, b - 30, 4);
-      } },
-    { name: "Legged Egg",  from: 11, emoji: "🐣", draw(c) {
-        const x = dino.x, b = dino.y, duck = dino.ducking && dino.onGround;
-        const step = Math.floor(legTick) % 2 === 0;
-        if (duck) { eggBody(c, x + 17, b, 46, 24); eye(c, x + 30, b - 15, 4); return; }
-        const lift = 7;
-        eggBody(c, x + 17, b - lift, 32, 38); eye(c, x + 24, b - lift - 26, 4);
-        stubbyLegs(c, x + 17, b, step);
-      } },
-    { name: "Hatchling",   from: 16, emoji: "🐣", draw(c) {
-        const x = dino.x, b = dino.y, duck = dino.ducking && dino.onGround;
-        const step = Math.floor(legTick) % 2 === 0;
-        if (duck) { eggBody(c, x + 17, b, 48, 24); eye(c, x + 32, b - 15, 4); return; }
-        const lift = 8;
-        eggBody(c, x + 15, b - lift, 30, 34);
-        ctx.fillStyle = c.fg; ctx.fillRect(x + 24, b - lift - 34, 16, 14); // head poking out
-        ctx.fillRect(x - 3, b - lift - 8, 7, 5);                            // tail nub
-        eye(c, x + 33, b - lift - 30, 4);
-        stubbyLegs(c, x + 16, b, step);
-      } },
-    { name: "Lil' Dino",   from: 21, emoji: "🦎", draw(c) { dinoForm(c, { scale: 0.9 }); } },
-    { name: "Runner",      from: 26, emoji: "🦖", draw(c) { dinoForm(c, { scale: 1 }); } },
-    { name: "Crested",     from: 31, emoji: "🦕", draw(c) { dinoForm(c, { scale: 1.03, spikes: 3 }); } },
-    { name: "Horned",      from: 36, emoji: "🦖", draw(c) { dinoForm(c, { scale: 1.07, spikes: 3, horn: true }); } },
-    { name: "Alpha",       from: 41, emoji: "🦕", draw(c) { dinoForm(c, { scale: 1.12, spikes: 4, horn: true }); } },
-    { name: "Super Dino",  from: 46, emoji: "🐲", draw(c) { dinoForm(c, { scale: 1.18, spikes: 5, horn: true, accent: true }); } },
+    { name: "角蛋",   from: 1,  emoji: "🥚", scale: 0.58, kind: "egg" },
+    { name: "破壳",   from: 6,  emoji: "🥚", scale: 0.66, kind: "hatch" },
+    { name: "幼龙",   from: 11, emoji: "🐣", scale: 0.74, kind: "dino", orn: {} },
+    { name: "少年龙", from: 16, emoji: "🦎", scale: 0.82, kind: "dino", orn: { spikes: 1 } },
+    { name: "角龙",   from: 21, emoji: "🦎", scale: 0.90, kind: "dino", orn: { horns: 1 } },
+    { name: "背鳍龙", from: 26, emoji: "🦖", scale: 0.97, kind: "dino", orn: { plates: 1 } },
+    { name: "双角龙", from: 31, emoji: "🦖", scale: 1.04, kind: "dino", orn: { spikes: 1, horns: 2 } },
+    { name: "烈焰龙", from: 36, emoji: "🐉", scale: 1.09, kind: "dino", orn: { crest: 1, tailFlame: 1, belly: 1, accentEye: 1 } },
+    { name: "王者龙", from: 41, emoji: "🐉", scale: 1.13, kind: "dino", orn: { crown: 1, horns: 1, belly: 1, accentEye: 1 } },
+    { name: "巨龙",   from: 46, emoji: "🐲", scale: 1.18, kind: "dino", orn: { plates: 1, crest: 1, horns: 2, wing: 1, belly: 1, accentEye: 1 } },
   ];
 
   function maxUnlockedStage() {
@@ -496,37 +509,227 @@
     const max = maxUnlockedStage();
     return Math.max(0, Math.min(chosenSkin == null ? max : chosenSkin, max));
   }
-  function drawDino(c) { EVOLUTIONS[effectiveStage()].draw(c); }
+  function formScale() { return EVOLUTIONS[effectiveStage()].scale; }
+
+  // The 96×100 form box anchored to the dino: body-left at dino.x, feet at dino.y.
+  function formBox() {
+    const unit = PXU * formScale();
+    const boxW = 96 * unit, boxH = 100 * unit;
+    return { unit, boxW, boxH, boxLeft: dino.x - (20 / 96) * boxW, boxTop: dino.y - (91 / 100) * boxH };
+  }
+  function crashColors(c) { return Object.assign({}, c, { fg: c.accent, hot: c.accent, eye: c.bg }); }
+
+  function dinoBase(c, B, accentEye) {
+    const fx = L => B.boxLeft + (L / 96) * B.boxW, fy = T => B.boxTop + (T / 100) * B.boxH;
+    const fw = w => (w / 96) * B.boxW, fh = h => (h / 100) * B.boxH, fr = r => (r / 96) * B.boxW;
+    const step = Math.floor(legTick) % 2 === 0;
+    ctx.fillStyle = c.fg;
+    rrect(fx(6), fy(46), fw(22), fh(13), fr(4));   // tail
+    rrect(fx(20), fy(42), fw(46), fh(28), fr(9));  // body
+    rrect(fx(58), fy(18), fw(30), fh(28), fr(7));  // head
+    rrect(fx(80), fy(32), fw(12), fh(11), fr(3));  // snout
+    rrect(fx(60), fy(50), fw(10), fh(7), fr(2));   // jaw
+    if (dino.onGround) {
+      rrect(fx(28), fy(64), fw(11), fh(step ? 24 : 18), fr(3));
+      rrect(fx(48), fy(66), fw(11), fh(step ? 18 : 22), fr(3));
+    } else {
+      rrect(fx(28), fy(62), fw(11), fh(18), fr(3));
+      rrect(fx(48), fy(68), fw(11), fh(16), fr(3));
+    }
+    rrect(fx(25), fy(85), fw(16), fh(6), fr(2));    // back foot
+    rrect(fx(47), fy(85), fw(16), fh(6), fr(2));    // front foot
+    ctx.fillStyle = accentEye ? c.hot : c.eye;
+    rrect(fx(64), fy(25), fw(7), fh(7), fr(2));     // eye
+  }
+
+  function drawWing(c, B) {
+    const fx = L => B.boxLeft + (L / 96) * B.boxW, fy = T => B.boxTop + (T / 100) * B.boxH;
+    const fw = w => (w / 96) * B.boxW, fh = h => (h / 100) * B.boxH;
+    ctx.save(); ctx.globalAlpha = 0.8; ctx.fillStyle = c.fg;
+    triBox(fx(28), fy(20), fw(32), fh(28), [[0, 1], [1, 1], [0.28, 0]]);
+    ctx.restore();
+  }
+
+  function drawDinoOrnaments(c, B, o) {
+    const fx = L => B.boxLeft + (L / 96) * B.boxW, fy = T => B.boxTop + (T / 100) * B.boxH;
+    const fw = w => (w / 96) * B.boxW, fh = h => (h / 100) * B.boxH, fr = r => (r / 96) * B.boxW;
+    const up = (x, y, w, h) => triBox(x, y, w, h, [[0.5, 0], [1, 1], [0, 1]]);
+    // structural — body color
+    if (o.spikes) { ctx.fillStyle = c.fg; up(fx(30), fy(30), fw(12), fh(14)); up(fx(44), fy(28), fw(12), fh(16)); }
+    if (o.plates) { ctx.fillStyle = c.fg; up(fx(24), fy(30), fw(12), fh(14)); up(fx(37), fy(26), fw(13), fh(18)); up(fx(51), fy(29), fw(12), fh(15)); }
+    if (o.horns >= 1) { ctx.fillStyle = c.fg; up(fx(65), fy(4), fw(12), fh(18)); }
+    if (o.horns >= 2) { ctx.fillStyle = c.fg; up(fx(76), fy(8), fw(10), fh(15)); }
+    // accent — hot (only on Lv36+ forms)
+    if (o.crest) { ctx.fillStyle = c.hot; up(fx(24), fy(24), fw(11), fh(20)); up(fx(36), fy(18), fw(11), fh(26)); up(fx(48), fy(22), fw(11), fh(22)); }
+    if (o.tailFlame) { ctx.fillStyle = c.hot; triBox(fx(-2), fy(44), fw(16), fh(17), [[1, 0], [1, 1], [0, 0.5]]); }
+    if (o.crown) { ctx.fillStyle = c.hot; up(fx(59), fy(2), fw(9), fh(16)); up(fx(68), fy(-1), fw(9), fh(19)); up(fx(77), fy(3), fw(9), fh(15)); }
+    if (o.belly) { ctx.fillStyle = c.hot; rrect(fx(24), fy(60), fw(36), fh(6), fr(3)); }
+  }
+
+  function drawEgg(c, B, duck) {
+    const fx = L => B.boxLeft + (L / 96) * B.boxW, fy = T => B.boxTop + (T / 100) * B.boxH;
+    const fw = w => (w / 96) * B.boxW, fh = h => (h / 100) * B.boxH, fr = r => (r / 96) * B.boxW;
+    const step = Math.floor(legTick) % 2 === 0;
+    ctx.fillStyle = c.fg;
+    if (duck) rrect(fx(16), fy(58), fw(64), fh(32), fr(15));
+    else rrect(fx(26), fy(32), fw(44), fh(60), fr(18));     // egg body
+    ctx.fillStyle = c.hot; triBox(fx(41), fy(12), fw(14), fh(24), [[0.5, 0], [1, 1], [0, 1]]); // horn
+    ctx.fillStyle = c.eye;                                   // 3 face dots
+    rrect(fx(36), fy(52), fw(4), fh(4), fr(2)); rrect(fx(44), fy(50), fw(4), fh(4), fr(2)); rrect(fx(52), fy(52), fw(4), fh(4), fr(2));
+    if (!duck) { // two thin feet
+      ctx.fillStyle = c.fg;
+      rrect(fx(38), fy(86), fw(4), fh(step ? 8 : 6), fr(1)); rrect(fx(35), fy(90), fw(11), fh(4), fr(1));
+      rrect(fx(55), fy(86), fw(4), fh(step ? 6 : 8), fr(1)); rrect(fx(54), fy(90), fw(11), fh(4), fr(1));
+    }
+  }
+
+  function drawHatch(c, B, duck) {
+    const fx = L => B.boxLeft + (L / 96) * B.boxW, fy = T => B.boxTop + (T / 100) * B.boxH;
+    const fw = w => (w / 96) * B.boxW, fh = h => (h / 100) * B.boxH, fr = r => (r / 96) * B.boxW;
+    const step = Math.floor(legTick) % 2 === 0;
+    if (duck) { drawEgg(c, B, true); return; }
+    ctx.fillStyle = c.fg;
+    rrect(fx(24), fy(58), fw(48), fh(36), fr(8));            // eggshell base
+    ctx.fillStyle = c.bg;                                    // cracked rim notches
+    for (let i = 0; i < 5; i++) triBox(fx(24 + i * 10), fy(54), fw(10), fh(8), [[0, 1], [0.5, 0], [1, 1]]);
+    ctx.fillStyle = c.fg;
+    rrect(fx(34), fy(30), fw(30), fh(30), fr(12));           // head
+    rrect(fx(60), fy(40), fw(12), fh(11), fr(3));            // snout
+    ctx.fillStyle = c.hot; triBox(fx(42), fy(10), fw(13), fh(22), [[0.5, 0], [1, 1], [0, 1]]); // horn
+    ctx.fillStyle = c.eye; rrect(fx(46), fy(38), fw(6), fh(6), fr(2)); // eye
+    ctx.fillStyle = c.fg;
+    rrect(fx(36), fy(90), fw(4), fh(step ? 8 : 6), fr(1)); rrect(fx(33), fy(94), fw(11), fh(4), fr(1));
+    rrect(fx(56), fy(90), fw(4), fh(step ? 6 : 8), fr(1)); rrect(fx(55), fy(94), fw(11), fh(4), fr(1));
+  }
+
+  // Low duck pose for the dino-base forms (DESIGN_SPEC §3 duck, in box units).
+  function drawDuckForm(c, B) {
+    const u = B.unit, x = dino.x, gy = dino.y, step = Math.floor(legTick) % 2 === 0;
+    ctx.fillStyle = c.fg;
+    rrect(x, gy - 30 * u, 60 * u, 18 * u, 7 * u);        // body
+    rrect(x + 50 * u, gy - 34 * u, 22 * u, 18 * u, 6 * u); // head
+    rrect(x + 70 * u, gy - 28 * u, 10 * u, 9 * u, 3 * u);  // snout
+    rrect(x + 12 * u, gy - 8 * u, 9 * u, 8 * u, 2 * u);
+    rrect(x + 34 * u, gy - 8 * u, 9 * u, (step ? 8 : 5) * u, 2 * u);
+    ctx.fillStyle = c.eye; rrect(x + 60 * u, gy - 30 * u, 5 * u, 5 * u, 2 * u);
+  }
+
+  function crashEye(c, B) {
+    const ex = B.boxLeft + 0.70 * B.boxW, ey = B.boxTop + 0.28 * B.boxH, r = 4 * B.unit;
+    ctx.strokeStyle = c.eye; ctx.lineWidth = Math.max(1.5, 2 * B.unit);
+    ctx.beginPath();
+    ctx.moveTo(ex - r, ey - r); ctx.lineTo(ex + r, ey + r);
+    ctx.moveTo(ex + r, ey - r); ctx.lineTo(ex - r, ey + r);
+    ctx.stroke();
+  }
+
+  function drawDino(baseC) {
+    const evo = EVOLUTIONS[effectiveStage()];
+    const crash = dino.crashed;
+    const c = crash ? crashColors(baseC) : baseC;
+    const B = formBox();
+    const duck = dino.ducking && dino.onGround;
+    if (evo.kind === "egg") { drawEgg(c, B, duck); }
+    else if (evo.kind === "hatch") { drawHatch(c, B, duck); }
+    else if (duck) { drawDuckForm(c, B); }
+    else {
+      const o = evo.orn || {};
+      if (o.wing) drawWing(c, B);
+      dinoBase(c, B, !!o.accentEye);
+      drawDinoOrnaments(c, B, o);
+    }
+    if (crash) crashEye(c, B);
+  }
   function refreshSkinUI() { progressDino.textContent = EVOLUTIONS[effectiveStage()].emoji; }
+
+  // ---- Flat-geometry primitives (DESIGN_SPEC §3) ----
+  function rrect(x, y, w, h, r) {
+    r = Math.max(0, Math.min(r, Math.min(w, h) / 2));
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath(); ctx.fill();
+  }
+  // Triangle from 3 fractional points [0..1] inside a box.
+  function triBox(L, T, W, H, pts) {
+    ctx.beginPath();
+    for (let i = 0; i < pts.length; i++) {
+      const X = L + pts[i][0] * W, Y = T + pts[i][1] * H;
+      if (i) ctx.lineTo(X, Y); else ctx.moveTo(X, Y);
+    }
+    ctx.closePath(); ctx.fill();
+  }
+
+  // Cactus into box (left x, ground gy, width W, height H). Ratios from the
+  // spec's 72×68 cactus box; `bush` adds the second trunk.
+  function drawCactus(c, x, gy, W, H, bush) {
+    const top = gy - H;
+    const px = L => x + (L / 72) * W, py = T => top + (T / 68) * H;
+    const pw = w => (w / 72) * W, ph = h => (h / 68) * H, pr = r => (r / 72) * W;
+    ctx.fillStyle = c.fg;
+    rrect(px(30), py(6), pw(13), ph(58), pr(5));
+    rrect(px(18), py(30), pw(15), ph(9), pr(4));
+    rrect(px(18), py(18), pw(9), ph(18), pr(4));
+    rrect(px(40), py(38), pw(15), ph(9), pr(4));
+    rrect(px(46), py(26), pw(9), ph(18), pr(4));
+    if (bush) { rrect(px(52), py(28), pw(10), ph(36), pr(4)); rrect(px(58), py(40), pw(11), ph(7), pr(3)); }
+  }
+
+  // Ptero into box (left x, top yTop, width W, height H). Two-frame wing.
+  function drawPtero(c, x, yTop, W, H, wingUp) {
+    const px = L => x + (L / 72) * W, py = T => yTop + (T / 68) * H;
+    const pw = w => (w / 72) * W, ph = h => (h / 68) * H, pr = r => (r / 72) * W;
+    ctx.fillStyle = c.fg;
+    if (wingUp) triBox(px(2), py(4), pw(40), ph(24), [[0, 0], [1, 0.35], [1, 0.85]]);
+    else triBox(px(2), py(24), pw(40), ph(24), [[0, 1], [1, 0.15], [1, 0.65]]);
+    rrect(px(30), py(24), pw(18), ph(10), pr(4));      // neck/body
+    rrect(px(44), py(17), pw(16), ph(14), pr(5));      // head
+    triBox(px(40), py(6), pw(18), ph(15), [[0, 0], [1, 0.55], [1, 1]]);  // crest
+    triBox(px(58), py(22), pw(13), ph(7), [[0, 0], [1, 0.5], [0, 1]]);   // beak
+    ctx.fillStyle = c.eye; rrect(px(48), py(21), pw(5), ph(5), pr(1));    // eye
+  }
+
+  // Dashed ground line in ink (DESIGN_SPEC §3).
+  function drawGround(c) {
+    ctx.fillStyle = c.ink;
+    for (let i = 0; i < BASE_W + 14; i += 14) {
+      const gx = ((i - (dist % 14)) % (BASE_W + 14));
+      ctx.fillRect(gx, GROUND + 2, 8, 2);
+    }
+  }
+
+  function drawCloud(c, cl) {
+    const W = 64, x = cl.x, y = cl.y;
+    ctx.fillStyle = c.secondary;
+    rrect(x + (4 / 72) * W, y + 8, (34 / 72) * W, 14, 7);
+    rrect(x + (22 / 72) * W, y, (32 / 72) * W, 18, 9);
+    rrect(x + (40 / 72) * W, y + 8, (26 / 72) * W, 13, 7);
+  }
 
   function drawObstacle(o, c) {
     if (o.type === "finish") {
-      ctx.fillStyle = c.fg;
-      ctx.fillRect(o.x, o.y - o.h, 4, o.h);
+      ctx.fillStyle = c.fg; rrect(o.x, o.y - o.h, 4, o.h, 2);
       const fw = 30, fh = 20, sq = 5;
       for (let r = 0; r < fh / sq; r++)
         for (let col = 0; col < fw / sq; col++) {
           ctx.fillStyle = (r + col) % 2 === 0 ? c.fg : c.bg;
           ctx.fillRect(o.x + 4 + col * sq, o.y - o.h + r * sq, sq, sq);
         }
+      ctx.fillStyle = c.accent; ctx.beginPath(); ctx.arc(o.x + 2, o.y - o.h, 4, 0, Math.PI * 2); ctx.fill();
       return;
     }
-    ctx.fillStyle = c.fg;
     if (o.type === "cactus") {
-      for (let i = 0; i < (o.cluster || 1); i++) {
-        const ox = o.x + i * (o.big ? 24 : 19);
-        const w = o.big ? 14 : 10, h = o.h;
-        ctx.fillRect(ox, o.y - h, w, h);
-        ctx.fillRect(ox - 5, o.y - h * 0.6, 5, 4);
-        ctx.fillRect(ox - 5, o.y - h * 0.6, 4, h * 0.32);
-        ctx.fillRect(ox + w, o.y - h * 0.72, 5, 4);
-        ctx.fillRect(ox + w + 1, o.y - h * 0.72, 4, h * 0.38);
+      if (o.cluster > 1) {
+        const cw = o.w / o.cluster;
+        for (let i = 0; i < o.cluster; i++) drawCactus(c, o.x + i * cw, o.y, cw, o.h, false);
+      } else {
+        drawCactus(c, o.x, o.y, o.w, o.h, o.bush);
       }
     } else {
-      const up = o.wing < 1;
-      ctx.fillRect(o.x + 10, o.y - 6, 24, 8);
-      ctx.fillRect(o.x + 30, o.y - 9, 8, 6);
-      ctx.fillRect(o.x, up ? o.y - 16 : o.y, 18, 8);
+      drawPtero(c, o.x, o.y - o.h, o.w, o.h, o.wing < 1);
     }
   }
 
@@ -543,24 +746,54 @@
       ctx.fillStyle = c.bg; ctx.beginPath(); ctx.arc(BASE_W - 64, 42, 11, 0, Math.PI * 2); ctx.fill();
     }
 
-    ctx.fillStyle = c.line;
-    for (const cl of clouds) { ctx.fillRect(cl.x, cl.y, 26, 7); ctx.fillRect(cl.x + 6, cl.y - 5, 16, 6); }
-
-    ctx.strokeStyle = c.mid; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.moveTo(0, GROUND + 2); ctx.lineTo(BASE_W, GROUND + 2); ctx.stroke();
-    ctx.fillStyle = c.mid;
-    for (let i = 0; i < BASE_W; i += 42) {
-      const px = (((i - dist) % BASE_W) + BASE_W) % BASE_W;
-      ctx.fillRect(px, GROUND + 7, 7, 2); ctx.fillRect(px + 20, GROUND + 10, 3, 2);
-    }
+    for (const cl of clouds) drawCloud(c, cl);
+    drawGround(c);
 
     for (const o of obstacles) drawObstacle(o, c);
 
-    ctx.globalAlpha = 0.5;
-    for (const p of particles) { ctx.fillStyle = c.mid; ctx.fillRect(p.x, p.y - 4, 3, 3); }
+    // particles: dust (secondary circles) + jump-arc dots (accent)
+    for (const p of particles) {
+      const a = Math.max(0, p.life / (p.max || 16));
+      ctx.globalAlpha = p.kind === "dot" ? Math.max(0.3, a) : 0.5 * a;
+      ctx.fillStyle = p.kind === "dot" ? c.accent : c.secondary;
+      ctx.beginPath(); ctx.arc(p.x, p.y, p.r || 3, 0, Math.PI * 2); ctx.fill();
+    }
     ctx.globalAlpha = 1;
 
     if (flashT === 0 || Math.floor(flashT) % 2 === 1) drawDino(c);
+
+    // score pops (+N) floating up in accent
+    if (pops.length) {
+      ctx.fillStyle = c.accent;
+      ctx.font = "700 22px " + "'Space Mono', monospace";
+      ctx.textBaseline = "middle";
+      for (const sp of pops) { ctx.globalAlpha = Math.max(0, sp.life / sp.max); ctx.fillText("+10", sp.x, sp.y); }
+      ctx.globalAlpha = 1;
+    }
+
+    // milestone accent pulse: an inner ring around the play area
+    if (pulseT > 0) {
+      ctx.globalAlpha = Math.min(1, pulseT / 26);
+      ctx.strokeStyle = c.accent; ctx.lineWidth = 4;
+      ctx.strokeRect(2, 2, BASE_W - 4, BASE_H - 4);
+      ctx.globalAlpha = 1;
+    }
+    // day/night invert flash: brief full-screen wipe
+    if (invertT > 0) {
+      ctx.globalAlpha = Math.min(1, invertT / 9) * 0.85;
+      ctx.fillStyle = c.fg; ctx.fillRect(0, 0, BASE_W, BASE_H);
+      ctx.globalAlpha = 1;
+    }
+    // DAY/NIGHT toast pill
+    if (toastT > 0) {
+      ctx.globalAlpha = Math.min(1, toastT / 18);
+      ctx.font = "700 20px 'Space Mono', monospace";
+      ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      const tw = ctx.measureText(toastText).width + 36;
+      ctx.fillStyle = c.accent; rrect(BASE_W / 2 - tw / 2, 22, tw, 34, 17);
+      ctx.fillStyle = "#fff"; ctx.fillText(toastText, BASE_W / 2, 40);
+      ctx.textAlign = "left"; ctx.globalAlpha = 1;
+    }
 
     scoreEl.textContent = String(Math.floor(score)).padStart(5, "0");
   }
@@ -610,31 +843,35 @@
   window.addEventListener("keydown", e => {
     if (isJumpKey(e)) { e.preventDefault(); jump(); }
     else if (e.code === "ArrowDown") { e.preventDefault(); setDuck(true); }
+    else if (e.code === "Escape" || e.code === "KeyP") { if (state === "play") pauseGame(); else if (state === "paused") resumeGame(); }
   }, { passive: false });
   window.addEventListener("keyup", e => {
     if (isJumpKey(e)) releaseJump();
     else if (e.code === "ArrowDown") setDuck(false);
   });
 
+  // Whole-screen input (DESIGN_SPEC §6): tap = jump, swipe-down / long-press =
+  // duck (held stays ducked). No on-screen game buttons.
+  let touch = null;
   stage.addEventListener("pointerdown", e => {
-    // Overlays live inside the stage; let taps on their buttons through to the
-    // button's own handler instead of triggering a jump/start underneath.
-    if (e.target.closest && e.target.closest("button")) return;
-    if (state === "clear" || state === "select" || state === "skins") return;
-    e.preventDefault(); jump();
+    if (e.target.closest && e.target.closest("button")) return; // overlay buttons
+    e.preventDefault();
+    if (state !== "play") { jump(); return; }                   // start / retry / resume
+    touch = { y: e.clientY, duck: false };
+    touch.timer = setTimeout(() => { if (touch) { touch.duck = true; setDuck(true); } }, 200);
   }, { passive: false });
-  stage.addEventListener("pointerup", () => releaseJump());
-  stage.addEventListener("pointercancel", () => releaseJump());
-
-  const jb = document.getElementById("jumpBtn");
-  jb.addEventListener("pointerdown", e => { e.preventDefault(); jump(); });
-  jb.addEventListener("pointerup", () => releaseJump());
-  jb.addEventListener("pointerleave", () => releaseJump());
-
-  const dbn = document.getElementById("duckBtn");
-  dbn.addEventListener("pointerdown", e => { e.preventDefault(); setDuck(true); });
-  dbn.addEventListener("pointerup", () => setDuck(false));
-  dbn.addEventListener("pointerleave", () => setDuck(false));
+  stage.addEventListener("pointermove", e => {
+    if (!touch || state !== "play") return;
+    if (e.clientY - touch.y > 24) { touch.duck = true; setDuck(true); clearTimeout(touch.timer); }
+  });
+  function endTouch() {
+    if (!touch) return;
+    clearTimeout(touch.timer);
+    if (touch.duck) setDuck(false); else jump();                // tap → jump
+    touch = null;
+  }
+  stage.addEventListener("pointerup", endTouch);
+  stage.addEventListener("pointercancel", () => { if (touch) { clearTimeout(touch.timer); setDuck(false); touch = null; } });
 
   nextBtn.addEventListener("click", () => {
     const next = level >= TOTAL_LEVELS ? 1 : level + 1;
@@ -668,15 +905,50 @@
   soundBtn.addEventListener("click", () => {
     soundOn = !soundOn;
     try { localStorage.setItem("dino_sound", soundOn ? "on" : "off"); } catch (e) {}
-    updateSoundUI();
+    updateSoundUI(); refreshSettings();
     if (soundOn) blip(520, 0.08);
+  });
+
+  // ---- Pause + Settings ----
+  pauseBtn.addEventListener("click", () => { if (state === "play") pauseGame(); else if (state === "paused") resumeGame(); });
+  document.getElementById("resumeBtn").addEventListener("click", resumeGame);
+  document.getElementById("pauseRestartBtn").addEventListener("click", () => startLevel(level));
+  document.getElementById("pauseHomeBtn").addEventListener("click", goHome);
+
+  function refreshSettings() {
+    document.getElementById("setSoundVal").textContent = soundOn ? "On" : "Off";
+    document.getElementById("setMotionVal").textContent = reduceMotion ? "On" : "Off";
+  }
+  function openSettings(from) { settingsFrom = from; refreshSettings(); state = "settings"; showOverlay(settingsOverlay); }
+  let settingsFrom = "ready";
+  document.getElementById("pauseSettingsBtn").addEventListener("click", () => openSettings("paused"));
+  document.getElementById("titleSettingsBtn").addEventListener("click", () => openSettings("ready"));
+  document.getElementById("setSoundBtn").addEventListener("click", () => {
+    soundOn = !soundOn;
+    try { localStorage.setItem("dino_sound", soundOn ? "on" : "off"); } catch (e) {}
+    updateSoundUI(); refreshSettings(); if (soundOn) blip(520, 0.08);
+  });
+  document.getElementById("setMotionBtn").addEventListener("click", () => {
+    reduceMotion = !reduceMotion;
+    try { localStorage.setItem("dino_motion", reduceMotion ? "reduce" : "full"); } catch (e) {}
+    refreshSettings();
+  });
+  document.getElementById("setResetBtn").addEventListener("click", () => {
+    unlocked = 1; bestByLevel = {}; chosenSkin = null; saveProgress();
+    try { localStorage.removeItem("dino_motion"); } catch (e) {}
+    refreshSkinUI(); blip(330, 0.12, "sawtooth");
+    goHome();
+  });
+  document.getElementById("settingsBackBtn").addEventListener("click", () => {
+    if (settingsFrom === "paused") { state = "paused"; showOverlay(pauseOverlay); }
+    else goHome();
   });
 
   window.addEventListener("resize", resize);
   window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", render);
   reduceMotionMQ.addEventListener("change", e => { reduceMotion = e.matches; });
   document.addEventListener("visibilitychange", () => {
-    if (document.hidden && state === "play") { state = "over"; ovTitle.textContent = "Paused"; ovSub.textContent = "Tap or space to resume"; showOverlay(overlay); }
+    if (document.hidden && state === "play") pauseGame();
   });
 
   // ---- Boot ----
