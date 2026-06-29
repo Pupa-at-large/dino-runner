@@ -60,67 +60,72 @@
   // Tokens: c small cactus · C tall (double-jump) · 2/3 clusters · b bird ·
   //   _ ground gap (jump across) · ^ wall/step (jump onto the top, then off) ·
   //   = floating platform · spacers . - ~ (small/medium/large).
+  // Each World (5 levels) introduces a new verb, matching the dino's evolution:
+  //  W1 jump+gap · W2 walls · W3 short duck-bar · W4 birds · W5 dense combos
+  //  W6 LONG duck-bar (sustained) · W7-10 full gauntlet, escalating.
+  // Tokens: c/2/3 cacti · C tall(double-jump) · b bird(jump OR duck) · _ gap
+  //  ^ wall(jump onto) · v short bar(duck under) · V long bar(hold duck)
   const LEVEL_PATTERNS = [
-    // World 1 — Egg (L1-5): learn to jump; a first gap appears
-    "c ~~ c ~~ c ~~ c",
+    // World 1 — Egg (L1-5): learn to jump; gaps, then a tall & a bird
     "c ~ c ~ _ ~ c ~ c",
-    "c ~ 2 ~ _ ~ c ~ C ~ c",
-    "c ~ b ~ _ ~ c ~ b ~ c",
-    "c ~ _ ~ C ~ b ~ _ ~ c",
+    "c ~ 2 ~ _ ~ c ~ c",
+    "c ~ _ ~ b ~ c ~ _",
+    "2 ~ _ ~ c ~ C ~ _",
+    "c ~ _ ~ b ~ 2 ~ _ ~ C",
     // World 2 — Cracked egg (L6-10): walls (jump onto the top) join in
-    "c ~ ^ ~ c ~ _ ~ C ~ b",
-    "2 ~ _ ~ ^ ~ b ~ c ~ _ ~ c",
-    "c ~ ^ ~ b ~ _ ~ 2 ~ ^ ~ c",
-    "C ~ _ ~ ^ ~ 2 ~ b ~ _ ~ C",
-    "b ~ ^ ~ _ ~ C ~ ^ ~ b ~ _",
-    // World 3 — Legged egg (L11-15): clusters, gaps & walls together
-    "2 - _ ~ ^ ~ b - 3 ~ _ ~ 2",
-    "c - ^ ~ b - _ ~ ^ ~ C - c",
-    "_ ~ ^ ~ 2 - _ ~ ^ ~ 2 - _",
-    "b - ^ ~ _ ~ C - ^ ~ b ~ _",
-    "3 ~ _ ~ ^ ~ b - _ ~ ^ ~ 2",
-    // World 4 — Hatchling (L16-20): bird-heavy interludes
-    "C - b - _ ~ ^ ~ 3 ~ b - _",
-    "b - b ~ ^ ~ _ ~ b - 2 ~ ^",
-    "2 - _ ~ 3 - b - ^ ~ 3 ~ b",
-    "c - b - _ ~ c - ^ ~ b - 2",
-    "3 - ^ ~ b - _ ~ 2 ~ ^ ~ C",
-    // World 5 — Small dino (L21-25): denser, a bird-and-gap finale
-    "3 - _ ~ b - ^ ~ 3 - _ ~ 2",
-    "C - b - ^ ~ _ ~ C - b ~ ^",
-    "2 - 3 ~ _ ~ b - ^ ~ C - _",
-    "b - 3 - ^ ~ _ ~ b - C ~ ^",
-    "b - _ ~ b - ^ ~ b - _ ~ b",
-    // World 6 — Runner (L26-30)
-    "3 - ^ ~ b - _ ~ C - ^ ~ 3",
-    "C - 3 ~ _ ~ b - ^ ~ C - _",
-    "3 . 2 ~ ^ ~ b - _ ~ 3 - C",
-    "2 - _ ~ C - b - ^ ~ 3 - _",
-    "3 - b - ^ ~ _ ~ 3 - b ~ ^",
-    // World 7 — Crested (L31-35): tighter clusters appear
-    "3 . _ ~ b - ^ ~ 3 . _ ~ 2",
-    "C - ^ ~ 3 . _ ~ b - C ~ ^",
-    "3 . _ ~ ^ ~ b - 3 - _ ~ C",
-    "b - 3 . ^ ~ _ ~ C - b ~ ^",
-    "3 . ^ ~ b - _ ~ 3 . ^ ~ C",
-    // World 8 — Horned (L36-40)
-    "3 . C - ^ ~ _ ~ 3 - b ~ ^",
-    "C . _ ~ b - ^ ~ 3 . C - _",
-    "3 . _ ~ 3 - ^ ~ C . _ ~ b",
-    "b - ^ ~ _ ~ 3 . C ~ ^ ~ b",
-    "3 . ^ ~ _ ~ b - 3 . _ ~ C",
-    // World 9 — Alpha (L41-45): gaps & walls everywhere
-    "3 . _ ~ ^ ~ C . _ ~ b - ^",
-    "C . ^ ~ b - _ ~ 3 . ^ ~ _",
-    "3 . _ ~ 3 . ^ ~ b - _ ~ C",
-    "b . ^ ~ _ ~ 3 . C ~ _ ~ ^",
-    "3 . ^ ~ _ ~ b . 3 . ^ ~ _",
-    // World 10 — Super dino (L46-50): the gauntlet, L50 a long finale
-    "3 . _ ~ ^ ~ C . _ ~ b . ^",
-    "C . ^ ~ _ ~ b . 3 . ^ ~ _",
-    "3 . _ ~ 3 . ^ ~ C . _ ~ b",
-    "b . ^ ~ _ ~ C . 3 ~ ^ ~ _",
-    "3 . _ ~ ^ ~ C . _ ~ b . ^ ~ _ ~ C",
+    "c ~ ^ ~ _ ~ c ~ b",
+    "2 ~ ^ ~ _ ~ C ~ ^",
+    "c ~ ^ ~ b ~ _ ~ ^ ~ c",
+    "C ~ _ ~ ^ ~ 2 ~ b ~ _",
+    "b ~ ^ ~ _ ~ C ~ ^ ~ b",
+    // World 3 — Legged egg (L11-15): the short duck-bar appears (slide under!)
+    "c ~ v ~ _ ~ ^ ~ c",
+    "2 ~ v ~ b ~ _ ~ ^",
+    "c ~ ^ ~ v ~ _ ~ C",
+    "v ~ _ ~ ^ ~ v ~ 2",
+    "3 ~ v ~ _ ~ ^ ~ b ~ v",
+    // World 4 — Hatchling (L16-20): bird-heavy, bars & clusters mixed
+    "C - b ~ v ~ _ ~ 3 ~ b",
+    "b ~ b ~ ^ ~ v ~ _ ~ b",
+    "3 ~ _ ~ v ~ b ~ ^ ~ b",
+    "b - ^ ~ v ~ _ ~ 3 ~ b",
+    "3 ~ v ~ b ~ ^ ~ _ ~ C",
+    // World 5 — Small dino (L21-25): denser combos
+    "3 - _ ~ ^ ~ v ~ 3 - _",
+    "C - b ~ ^ ~ v ~ _ ~ C",
+    "2 - 3 ~ _ ~ v ~ ^ ~ C",
+    "b - 3 ~ ^ ~ v ~ _ ~ b",
+    "3 ~ _ ~ b ~ v ~ ^ ~ C",
+    // World 6 — Runner (L26-30): the LONG bar — hold the duck through a tunnel
+    "3 - ^ ~ V ~ _ ~ C - b",
+    "C ~ _ ~ V ~ ^ ~ 3 ~ b",
+    "2 - _ ~ V ~ b ~ ^ ~ 3",
+    "3 - b ~ V ~ ^ ~ _ ~ C",
+    "b - V ~ _ ~ ^ ~ 3 - v",
+    // World 7 — Crested (L31-35): tighter, more long bars
+    "3 . _ ~ V ~ ^ ~ 3 . v",
+    "C - ^ ~ V ~ 3 . _ ~ b",
+    "3 . _ ~ ^ ~ V ~ b - C",
+    "b - 3 . v ~ _ ~ C ~ V",
+    "3 . v ~ b - _ ~ V ~ C",
+    // World 8 — Horned (L36-40): full mix
+    "3 . C - ^ ~ V ~ _ ~ 3 ~ b",
+    "C . _ ~ v ~ b - ^ ~ V ~ C",
+    "3 . _ ~ 3 - V ~ ^ ~ C ~ b",
+    "b - ^ ~ V ~ _ ~ 3 . C ~ v",
+    "3 . v ~ _ ~ b - 3 . V ~ C",
+    // World 9 — Alpha (L41-45): gauntlet
+    "3 . _ ~ ^ ~ V ~ C . _ ~ b",
+    "C . v ~ b - _ ~ 3 . ^ ~ V",
+    "3 . _ ~ 3 . V ~ b - ^ ~ C",
+    "b . ^ ~ V ~ _ ~ 3 . C ~ v",
+    "3 . v ~ _ ~ b . 3 . V ~ ^",
+    // World 10 — Super dino (L46-50): hardest; L50 a long finale
+    "3 . _ ~ ^ ~ V ~ C . _ ~ b . v",
+    "C . V ~ _ ~ b . 3 . ^ ~ v",
+    "3 . _ ~ 3 . V ~ C . ^ ~ b ~ v",
+    "b . v ~ ^ ~ V ~ C . 3 ~ _",
+    "3 . _ ~ ^ ~ V ~ C . _ ~ b . v ~ _ ~ C ~ V",
   ];
 
   // Footprint (world width) of each obstacle, used to advance the cursor.
@@ -173,6 +178,12 @@
         items.push({ at: cursor + w / 2 - 16, type: "coin", h: 98 }); // coins to grab up top
         items.push({ at: cursor + w / 2 + 16, type: "coin", h: 98 });
         cursor += w + 1.0 * u;
+      } else if (ch === "v" || ch === "V") {   // overhead bar — must DUCK under (can't jump over)
+        const long = ch === "V";
+        cursor += 0.75 * u;                  // run-up: land & start the duck in time
+        const w = (long ? 1.7 : 0.55) * u;   // long = a tunnel you hold the duck through
+        items.push({ at: cursor, type: "bar", w, clear: 50 });
+        cursor += w + 0.95 * u;              // stand back up & recover
       } else {
         // Tall cacti need a double jump: isolate them so the player always has
         // room to set it up (before) and recover from its long airtime (after),
@@ -182,6 +193,11 @@
         cursor += obstacleFootprint(ch) + BASE_GAP + (ch === "C" ? 0.9 * u : 0);
       }
     }
+    // Guarantee at least one coin per level (so every level can power up once).
+    // If the pattern had no gap/wall to hang coins on, drop one at running height
+    // in an open early stretch — the dino sweeps it up just by passing through.
+    if (!items.some(it => it.type === "coin")) items.push({ at: 640, type: "coin", h: 44 });
+    items.sort((a, b) => a.at - b.at);     // spawnDue expects ascending order
     return { items, goal: cursor + 360 };
   }
 
@@ -493,6 +509,8 @@
         gaps.push({ x, w: it.w });
       } else if (it.type === "platform") {
         obstacles.push({ type: "platform", x, y: GROUND - it.h, w: it.w });
+      } else if (it.type === "bar") {
+        obstacles.push({ type: "bar", x, y: GROUND - it.clear, w: it.w });
       } else if (it.type === "wall") {
         obstacles.push({ type: "wall", x, y: GROUND - it.h, w: it.w, h: it.h });
       } else if (it.variant === "tall") {
@@ -635,6 +653,11 @@
         continue;
       }
       if (o.type === "platform") continue;          // one-way; landing handled above, never kills
+      if (o.type === "bar") {                        // overhead bar — only a duck passes under
+        const ducked = dino.ducking && dino.onGround;
+        if (!ducked && dino.x + dino.w > o.x + 4 && dino.x < o.x + o.w - 4) { if (hitObstacle(o)) return; }
+        continue;
+      }
       if (o.type === "wall") {                       // smashing into the front face kills
         if (dino.x + dino.w > o.x + 2 && dino.x < o.x + 2 && dino.y > o.y + 6) { if (hitObstacle(o)) return; }
         continue;                                    // top is landable (handled above)
@@ -1026,6 +1049,19 @@
     if (o.type === "platform") {
       ctx.fillStyle = c.fg; rrect(o.x, o.y, o.w, 12, 5);
       ctx.fillStyle = c.mid; rrect(o.x + 4, o.y + 4, o.w - 8, 3, 2); // top groove
+      return;
+    }
+    if (o.type === "bar") {
+      const topY = 4, bottom = o.y;                 // o.y is the bar's bottom edge
+      ctx.fillStyle = c.fg; rrect(o.x, topY, o.w, bottom - topY, 6);
+      ctx.fillStyle = c.bg;                          // seams for texture
+      for (let sx = o.x + 44; sx < o.x + o.w - 8; sx += 44) ctx.fillRect(sx, topY + 6, 2, (bottom - topY) * 0.62);
+      ctx.fillStyle = c.accent;                      // danger lip + downward spikes ("don't raise your head")
+      rrect(o.x, bottom - 6, o.w, 6, 3);
+      const tw = 18;
+      ctx.beginPath();
+      for (let tx = o.x + 6; tx + tw <= o.x + o.w - 6; tx += tw) { ctx.moveTo(tx, bottom); ctx.lineTo(tx + tw / 2, bottom + 9); ctx.lineTo(tx + tw, bottom); }
+      ctx.fill();
       return;
     }
     if (o.type === "wall") {
