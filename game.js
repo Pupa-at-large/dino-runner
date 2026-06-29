@@ -199,6 +199,7 @@
   let speed, dist, score, night = false, flashT = 0;
   let invertT = 0, pulseT = 0, toastT = 0, toastText = "", lastMilestone = 0;
   let coachJumped = false, coachDucked = false; // first-level tutorial prompts
+  let dyingT = 0;                                 // death-animation countdown
   let level = 1, cfg = levelConfig(1);
   let goal = 2200, schedule = [], schedIdx = 0;
   let state = "ready";
@@ -308,13 +309,34 @@
     fanfare();
     if (stageAfter > stageBefore) setTimeout(() => fanfare(), 260); // extra flourish on new form
   }
-  function failLevel() {
-    state = "over";
+  // Crash \u2192 a brief "death" beat on the playfield (frozen scene, crashed dino
+  // pops and topples) before the Game over screen slides in.
+  function crash() {
+    state = "dying";
     dino.crashed = true;
-    overStats.textContent = "Level " + level + " \u00b7 Score " + String(Math.floor(score)).padStart(5, "0");
-    showOverlay(overOverlay);
+    dino.ducking = false;
+    dino.vy = -7;                      // little death hop
+    dyingT = reduceMotion ? 1 : 44;    // ~0.7s (skipped under reduced motion)
     flashT = reduceMotion ? 0 : 8;
     blip(150, 0.2, "sawtooth");
+    if (!reduceMotion)
+      for (let i = 0; i < 9; i++)
+        particles.push({ kind: "dust", x: dino.x + dino.w / 2, y: dino.y - dino.h / 2, r: 3 + Math.random() * 3, vr: 0, vx: (Math.random() - 0.5) * 5, vy: -2 - Math.random() * 4, life: 26, max: 26 });
+  }
+  function tickDying() {
+    // Scene stays frozen (update() doesn't run); only the dead dino + debris move.
+    dino.vy = Math.min(dino.vy + GRAV, MAX_FALL);
+    dino.y += dino.vy;
+    if (dino.y > GROUND + 36) { dino.y = GROUND + 36; dino.vy = 0; }
+    for (const p of particles) { p.x += p.vx; p.y += p.vy; if (p.kind === "dust") p.vy += 0.18; p.life--; }
+    particles = particles.filter(p => p.life > 0);
+    if (flashT > 0) flashT--;
+    if (--dyingT <= 0) showGameOver();
+  }
+  function showGameOver() {
+    state = "over";
+    overStats.textContent = "Level " + level + " \u00b7 Score " + String(Math.floor(score)).padStart(5, "0");
+    showOverlay(overOverlay);
   }
   function refreshHi() {
     let m = 0; for (const k in bestByLevel) if (bestByLevel[k] > m) m = bestByLevel[k];
@@ -448,7 +470,7 @@
       }
       const pad = 4;
       const ob = { x: o.x + pad, y: o.y, w: o.w - pad * 2, h: o.h - pad };
-      if (box.x < ob.x + ob.w && box.x + box.w > ob.x && box.y - box.h < ob.y && box.y > ob.y - ob.h) { failLevel(); return; }
+      if (box.x < ob.x + ob.w && box.x + box.w > ob.x && box.y - box.h < ob.y && box.y > ob.y - ob.h) { crash(); return; }
     }
 
     if (dist >= goal) { clearLevel(); return; }
@@ -575,14 +597,19 @@
     rrect(fx(80), fy(32), fw(12), fh(11), fr(3));  // snout
     rrect(fx(60), fy(50), fw(10), fh(7), fr(2));   // jaw
     if (dino.onGround) {
-      rrect(fx(28), fy(64), fw(11), fh(step ? 24 : 18), fr(3));
-      rrect(fx(48), fy(66), fw(11), fh(step ? 18 : 22), fr(3));
+      // running stride — the FEET clearly alternate planted (at ground) and
+      // lifted, so the run reads at every form scale.
+      const backDown = step;
+      const backFt = backDown ? 85 : 77, frontFt = backDown ? 77 : 85;
+      rrect(fx(28), fy(63), fw(11), fh(backFt - 63), fr(3));   // back leg
+      rrect(fx(25), fy(backFt), fw(16), fh(6), fr(2));          // back foot
+      rrect(fx(48), fy(63), fw(11), fh(frontFt - 63), fr(3));   // front leg
+      rrect(fx(47), fy(frontFt), fw(16), fh(6), fr(2));         // front foot
     } else {
-      rrect(fx(28), fy(62), fw(11), fh(18), fr(3));
-      rrect(fx(48), fy(68), fw(11), fh(16), fr(3));
+      // airborne — legs tucked together
+      rrect(fx(28), fy(62), fw(11), fh(18), fr(3)); rrect(fx(25), fy(80), fw(16), fh(6), fr(2));
+      rrect(fx(48), fy(66), fw(11), fh(14), fr(3)); rrect(fx(47), fy(80), fw(16), fh(6), fr(2));
     }
-    rrect(fx(25), fy(85), fw(16), fh(6), fr(2));    // back foot
-    rrect(fx(47), fy(85), fw(16), fh(6), fr(2));    // front foot
     ctx.fillStyle = accentEye ? c.hot : c.eye;
     rrect(fx(64), fy(25), fw(7), fh(7), fr(2));     // eye
   }
@@ -617,14 +644,15 @@
     const step = Math.floor(legTick) % 2 === 0;
     ctx.fillStyle = c.fg;
     if (duck) rrect(fx(16), fy(58), fw(64), fh(32), fr(15));
-    else rrect(fx(26), fy(32), fw(44), fh(60), fr(18));     // egg body
-    ctx.fillStyle = c.hot; triBox(fx(41), fy(12), fw(14), fh(24), [[0.5, 0], [1, 1], [0, 1]]); // horn
+    else rrect(fx(26), fy(24), fw(44), fh(52), fr(18));     // egg body (raised onto legs)
+    ctx.fillStyle = c.hot; triBox(fx(41), fy(6), fw(14), fh(22), [[0.5, 0], [1, 1], [0, 1]]); // horn
     ctx.fillStyle = c.eye;                                   // 3 face dots
-    rrect(fx(36), fy(52), fw(4), fh(4), fr(2)); rrect(fx(44), fy(50), fw(4), fh(4), fr(2)); rrect(fx(52), fy(52), fw(4), fh(4), fr(2));
-    if (!duck) { // two thin feet
+    rrect(fx(36), fy(46), fw(4), fh(4), fr(2)); rrect(fx(44), fy(44), fw(4), fh(4), fr(2)); rrect(fx(52), fy(46), fw(4), fh(4), fr(2));
+    if (!duck) { // two thin running legs — feet alternate planted / lifted
       ctx.fillStyle = c.fg;
-      rrect(fx(38), fy(86), fw(4), fh(step ? 8 : 6), fr(1)); rrect(fx(35), fy(90), fw(11), fh(4), fr(1));
-      rrect(fx(55), fy(86), fw(4), fh(step ? 6 : 8), fr(1)); rrect(fx(54), fy(90), fw(11), fh(4), fr(1));
+      const lFt = step ? 87 : 79, rFt = step ? 79 : 87;
+      rrect(fx(40), fy(74), fw(5), fh(lFt - 74), fr(2)); rrect(fx(36), fy(lFt), fw(12), fh(4), fr(2));
+      rrect(fx(53), fy(74), fw(5), fh(rFt - 74), fr(2)); rrect(fx(52), fy(rFt), fw(12), fh(4), fr(2));
     }
   }
 
@@ -642,9 +670,10 @@
     rrect(fx(60), fy(40), fw(12), fh(11), fr(3));            // snout
     ctx.fillStyle = c.hot; triBox(fx(42), fy(10), fw(13), fh(22), [[0.5, 0], [1, 1], [0, 1]]); // horn
     ctx.fillStyle = c.eye; rrect(fx(46), fy(38), fw(6), fh(6), fr(2)); // eye
-    ctx.fillStyle = c.fg;
-    rrect(fx(36), fy(90), fw(4), fh(step ? 8 : 6), fr(1)); rrect(fx(33), fy(94), fw(11), fh(4), fr(1));
-    rrect(fx(56), fy(90), fw(4), fh(step ? 6 : 8), fr(1)); rrect(fx(55), fy(94), fw(11), fh(4), fr(1));
+    ctx.fillStyle = c.fg;                                    // two feet, alternating
+    const lFt = step ? 94 : 90, rFt = step ? 90 : 94;
+    rrect(fx(37), fy(86), fw(4), fh(lFt - 86), fr(2)); rrect(fx(34), fy(lFt), fw(11), fh(4), fr(2));
+    rrect(fx(55), fy(86), fw(4), fh(rFt - 86), fr(2)); rrect(fx(54), fy(rFt), fw(11), fh(4), fr(2));
   }
 
   // Low duck pose for the dino-base forms (DESIGN_SPEC §3 duck, in box units).
@@ -874,6 +903,7 @@
 
   function loop() {
     if (state === "play") update();
+    else if (state === "dying") tickDying();
     tickConfetti();   // animates over the clear overlay (state !== play)
     render();
     requestAnimationFrame(loop);
