@@ -156,6 +156,10 @@
         cursor += 0.45 * u;                  // run-up to the edge
         const w = 0.50 * gapU;               // crossable at the level's min speed
         items.push({ at: cursor, type: "gap", w });
+        const gc = cursor + w / 2;           // reward arc of coins over the gap
+        items.push({ at: gc - 26, type: "coin", h: 66 });
+        items.push({ at: gc,      type: "coin", h: 82 });
+        items.push({ at: gc + 26, type: "coin", h: 66 });
         cursor += w + 0.9 * u;               // land + recover past the far edge
       } else if (ch === "=") {               // floating platform — jump onto, run, drop
         cursor += 0.5 * u;
@@ -166,6 +170,8 @@
         cursor += 0.7 * u;
         const w = 0.6 * u;                   // a step-sized plateau, not a long mesa
         items.push({ at: cursor, type: "wall", w, h: 62 });
+        items.push({ at: cursor + w / 2 - 16, type: "coin", h: 98 }); // coins to grab up top
+        items.push({ at: cursor + w / 2 + 16, type: "coin", h: 98 });
         cursor += w + 1.0 * u;
       } else {
         // Tall cacti need a double jump: isolate them so the player always has
@@ -218,7 +224,11 @@
   const GRAV = 0.62, JUMP_V = -11.5, JUMP_V2 = -10.6, MAX_FALL = 16;
   const MILESTONE = 5200;   // world distance between day/night flips (calm cadence)
   const dino = { x: 64, y: 0, vy: 0, ducking: false, onGround: true, crashed: false, jumps: 0 };
-  let obstacles = [], clouds = [], particles = [], pops = [], confetti = [], gaps = [];
+  let obstacles = [], clouds = [], particles = [], pops = [], confetti = [], gaps = [], coins = [];
+  // Mario-mushroom power-up: a collected coin makes the dino BIG, which absorbs
+  // one otherwise-lethal hit (then it shrinks back, briefly invincible).
+  const POWER_SCALE = 1.3, COIN_SCORE = 50, MERCY_FRAMES = 72;
+  let powered = false, mercyT = 0;
   let speed, dist, score, night = false, flashT = 0;
   let invertT = 0, pulseT = 0, toastT = 0, toastText = "", lastMilestone = 0;
   // Learn-by-doing tutorial (level 1, first run): freeze the world at the moment
@@ -306,7 +316,8 @@
     const pattern = tutorialMode ? TUTORIAL_PATTERN : (LEVEL_PATTERNS[n - 1] || "c ~ c ~ c");
     const built = buildSchedule(pattern, cfg);
     schedule = built.items; goal = built.goal; schedIdx = 0;
-    obstacles = []; clouds = []; particles = []; gaps = [];
+    obstacles = []; clouds = []; particles = []; gaps = []; coins = [];
+    powered = false; mercyT = 0;
     speed = cfg.startSpeed; dist = 0; score = 0; pops = []; confetti = [];
     night = false; flashT = 0; finishSpawned = false; midPlayed = false;
     invertT = 0; pulseT = 0; toastT = 0; lastMilestone = 0;
@@ -356,6 +367,30 @@
     showOverlay(clearOverlay);
     fanfare();
     if (newForm) setTimeout(() => fanfare(), 260); // extra flourish on new form
+  }
+  // Collecting a coin grows the dino BIG. Being big absorbs one lethal hit.
+  function gainPower(cn) {
+    blip(740, 0.1, "triangle"); blip(990, 0.1, "triangle");
+    if (cn && !reduceMotion)
+      for (let i = 0; i < 7; i++)
+        particles.push({ kind: "dot", x: cn.x, y: cn.y, vx: (Math.random() - 0.5) * 4, vy: -1 - Math.random() * 3, r: 3, life: 18, max: 18 });
+    if (!powered) { powered = true; toastText = "\u2726 \u53d8\u5927\u4e86 BIG"; toastT = 72; pulseT = reduceMotion ? 0 : 18; }
+  }
+  // A lethal touch: if big, shrink + plow through + brief mercy (survives);
+  // if already mid-mercy, ignore; otherwise it's a real crash. Returns true on death.
+  function hitObstacle(o) {
+    if (mercyT > 0) return false;
+    if (powered) {
+      powered = false; mercyT = MERCY_FRAMES;
+      if (o) o.smashed = true;
+      flashT = reduceMotion ? 0 : 6;
+      blip(200, 0.14, "square");
+      if (!reduceMotion)
+        for (let i = 0; i < 8; i++)
+          particles.push({ kind: "dust", x: dino.x + dino.w / 2, y: dino.y - dino.h / 2, r: 3 + Math.random() * 3, vr: 0, vx: (Math.random() - 0.5) * 5, vy: -1 - Math.random() * 3, life: 22, max: 22 });
+      return false;
+    }
+    crash(); return true;
   }
   // Crash \u2192 a brief "death" beat on the playfield (frozen scene, crashed dino
   // pops and topples) before the Game over screen slides in.
@@ -452,6 +487,8 @@
         // One duck-height band: clears a ducking dino, blocks a standing one,
         // and can also be jumped over.
         obstacles.push({ type: "bird", x, y: GROUND - 30, w: 52, h: 34, wing: 0 });
+      } else if (it.type === "coin") {
+        coins.push({ x, y: GROUND - it.h, r: 11, taken: false, t: 0 });
       } else if (it.type === "gap") {
         gaps.push({ x, w: it.w });
       } else if (it.type === "platform") {
@@ -569,6 +606,15 @@
     obstacles = obstacles.filter(o => o.x + o.w > -10);
     for (const g of gaps) g.x -= speed;
     gaps = gaps.filter(g => g.x + g.w > -10);
+    // Coins: scroll, bob, and auto-collect on overlap → grow big (power-up).
+    for (const cn of coins) {
+      cn.x -= speed; cn.t++;
+      if (!cn.taken && cn.x > dino.x - cn.r && cn.x < dino.x + dino.w + cn.r &&
+          cn.y > dino.y - dino.h - cn.r && cn.y < dino.y + cn.r) {
+        cn.taken = true; score += COIN_SCORE; gainPower(cn);
+      }
+    }
+    coins = coins.filter(cn => !cn.taken && cn.x + cn.r > -10);
 
     // Jump-arc trail (DESIGN_SPEC §4): accent dots along the parabola.
     if (!dino.onGround && !reduceMotion) particles.push({ kind: "dot", x: dino.x + dino.w * 0.5, y: dino.y - dino.h * 0.5, vx: -speed * 0.4, vy: 0, r: 3, life: 16, max: 16 });
@@ -590,17 +636,19 @@
       }
       if (o.type === "platform") continue;          // one-way; landing handled above, never kills
       if (o.type === "wall") {                       // smashing into the front face kills
-        if (dino.x + dino.w > o.x + 2 && dino.x < o.x + 2 && dino.y > o.y + 6) { crash(); return; }
+        if (dino.x + dino.w > o.x + 2 && dino.x < o.x + 2 && dino.y > o.y + 6) { if (hitObstacle(o)) return; }
         continue;                                    // top is landable (handled above)
       }
       const pad = 4;
       const ob = { x: o.x + pad, y: o.y, w: o.w - pad * 2, h: o.h - pad };
-      if (box.x < ob.x + ob.w && box.x + box.w > ob.x && box.y - box.h < ob.y && box.y > ob.y - ob.h) { crash(); return; }
+      if (box.x < ob.x + ob.w && box.x + box.w > ob.x && box.y - box.h < ob.y && box.y > ob.y - ob.h) { if (hitObstacle(o)) return; }
     }
+    obstacles = obstacles.filter(o => !o.smashed);
 
     if (dist >= goal) { clearLevel(); return; }
 
     legTick += speed * 0.06;
+    if (mercyT > 0) mercyT--;
     if (flashT > 0) flashT--;
     if (invertT > 0) invertT--;
     if (pulseT > 0) pulseT--;
@@ -701,7 +749,7 @@
     const max = maxUnlockedStage();
     return Math.max(0, Math.min(chosenSkin == null ? max : chosenSkin, max));
   }
-  function formScale() { return EVOLUTIONS[effectiveStage()].scale; }
+  function formScale() { return EVOLUTIONS[effectiveStage()].scale * (powered ? POWER_SCALE : 1); }
 
   // The 96×100 form box anchored to the dino: body-left at dino.x, feet at dino.y.
   function formBox() {
@@ -940,6 +988,20 @@
     rrect(x + (40 / 72) * W, y + 8, (26 / 72) * W, 13, 7);
   }
 
+  // Floating coins: an accent ring with a centre pip, gently bobbing.
+  function drawCoins(c) {
+    for (const cn of coins) {
+      if (cn.taken) continue;
+      const by = cn.y + (reduceMotion ? 0 : Math.sin(cn.t * 0.15) * 3);
+      ctx.fillStyle = c.accent;
+      ctx.beginPath(); ctx.arc(cn.x, by, cn.r, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = c.bg;
+      ctx.beginPath(); ctx.arc(cn.x, by, cn.r * 0.54, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = c.accent;
+      ctx.beginPath(); ctx.arc(cn.x, by, cn.r * 0.2, 0, Math.PI * 2); ctx.fill();
+    }
+  }
+
   // Parallax rolling hills to give the scene depth (fills the empty middle).
   // Two soft bands of domes drifting slower than the foreground.
   function drawHills(c) {
@@ -1023,6 +1085,7 @@
     if (state === "ready") drawCactus(c, BASE_W * 0.62, GROUND, 38, 66, false); // title scene
 
     for (const o of obstacles) drawObstacle(o, c);
+    drawCoins(c);
 
     // particles: dust (secondary circles) + jump-arc dots (accent)
     for (const p of particles) {
@@ -1033,7 +1096,19 @@
     }
     ctx.globalAlpha = 1;
 
-    if (flashT === 0 || Math.floor(flashT) % 2 === 1) drawDino(c);
+    // Power aura: a pulsing accent ring around the big dino.
+    if (powered && state !== "ready") {
+      const B = formBox();
+      const cx = B.boxLeft + B.boxW * 0.5, cy = B.boxTop + B.boxH * 0.56;
+      const rad = Math.max(B.boxW, B.boxH) * 0.6 + (reduceMotion ? 0 : Math.sin(uiTick * 0.2) * 3);
+      ctx.strokeStyle = c.accent; ctx.globalAlpha = 0.45; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(cx, cy, rad, 0, Math.PI * 2); ctx.stroke();
+      ctx.globalAlpha = 1; ctx.lineWidth = 1;
+    }
+    // Mercy invincibility blinks the dino; the death flash hides it on alt frames.
+    const flashHide = flashT > 0 && Math.floor(flashT) % 2 === 0;
+    const mercyHide = mercyT > 0 && !reduceMotion && Math.floor(uiTick) % 8 < 3;
+    if (!flashHide && !mercyHide) drawDino(c);
 
     // score pops (+N) floating up in accent
     if (pops.length) {
@@ -1262,7 +1337,8 @@
     window.__dino = {
       get state() { return state; }, get level() { return level; },
       get dino() { return dino; }, get obstacles() { return obstacles; },
-      get gaps() { return gaps; },
+      get gaps() { return gaps; }, get coins() { return coins; },
+      get powered() { return powered; }, get mercy() { return mercyT; },
       get speed() { return speed; }, get ground() { return GROUND; },
       get goal() { return goal; }, get dist() { return dist; },
       jump, releaseJump, setDuck, next: () => nextBtn.click(),
