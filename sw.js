@@ -1,6 +1,8 @@
-/* Dino Runner service worker — offline-first app shell cache.
-   Bump CACHE when any shell file changes so clients pick up the new version. */
-const CACHE = "dino-runner-v2";
+/* Dino Runner service worker.
+   Network-first for the app shell so deploys show up immediately when online;
+   falls back to the cache offline. (The old cache-first strategy pinned clients
+   to the first version they ever loaded — that's why updates didn't appear.) */
+const CACHE = "dino-runner-v3";
 const SHELL = [
   "./",
   "index.html",
@@ -28,19 +30,19 @@ self.addEventListener("activate", (e) => {
 self.addEventListener("fetch", (e) => {
   const req = e.request;
   if (req.method !== "GET") return;
-  // Cache-first for the static shell; fall back to network and cache the result.
+  if (new URL(req.url).origin !== location.origin) return; // leave cross-origin alone
+  // Network-first: always try the latest, cache it, fall back to cache offline.
   e.respondWith(
-    caches.match(req).then((hit) =>
-      hit ||
-      fetch(req)
-        .then((res) => {
-          if (res && res.ok && new URL(req.url).origin === location.origin) {
-            const copy = res.clone();
-            caches.open(CACHE).then((c) => c.put(req, copy));
-          }
-          return res;
-        })
-        .catch(() => caches.match("index.html"))
-    )
+    fetch(req)
+      .then((res) => {
+        if (res && res.ok) {
+          const copy = res.clone();
+          caches.open(CACHE).then((c) => c.put(req, copy));
+        }
+        return res;
+      })
+      .catch(() =>
+        caches.match(req).then((hit) => hit || (req.mode === "navigate" ? caches.match("index.html") : undefined))
+      )
   );
 });
