@@ -400,8 +400,60 @@ body {
 .setting-val { font-family: var(--font-mono); font-weight: 700; color: var(--accent); }
 .setting-row.danger { color: var(--accent); }
 
+/* ---- Title / home screen (DESIGN_SPEC §5.1) ---- */
+.title-screen {
+  justify-content: flex-start;
+  padding-top: 9%;
+  gap: 16px;
+  /* fade out toward the bottom so the dino + cactus scene shows on the ground */
+  background: linear-gradient(to bottom,
+    var(--bg) 0%,
+    color-mix(in srgb, var(--bg) 88%, transparent) 52%,
+    transparent 80%);
+  backdrop-filter: none;
+}
+.title-block { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+.game-title {
+  font-family: var(--font-ui);
+  font-weight: 700;
+  font-size: clamp(42px, 14vw, 66px);
+  line-height: 0.9;
+  letter-spacing: -2.5px;
+  text-align: center;
+  color: var(--ink);
+}
+.title-rule { display: block; width: 66px; height: 6px; border-radius: 3px; background: var(--accent); }
+.hi-score { position: absolute; top: 14px; right: 16px; font-family: var(--font-mono); font-size: 12px; letter-spacing: 1px; color: var(--muted); }
+.cta-big { font-size: 16px; padding: 15px 32px; }
+.pause-glyph { letter-spacing: 6px; }
+.over-kicker { color: var(--accent); }
+
+/* ---- How-to-play tutorial ---- */
+.how-list {
+  display: flex; flex-direction: column; gap: 12px;
+  width: 100%; max-width: 340px; margin: 18px 0 8px;
+}
+.how-row {
+  display: flex; align-items: center; gap: 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--hairline); border-radius: 14px;
+  background: var(--card); text-align: left;
+}
+.how-ico { font-size: 26px; line-height: 1; width: 38px; text-align: center; flex: none; }
+.how-txt { display: flex; flex-direction: column; font-size: 12.5px; color: var(--body-text); }
+.how-txt b { font-size: 15px; color: var(--ink); margin-bottom: 2px; }
+
+/* ---- Level-clear celebration ---- */
+#clearOverlay { background: color-mix(in srgb, var(--bg) 52%, transparent); backdrop-filter: none; }
+#clearOverlay:not(.hidden) { animation: pop-in 0.42s cubic-bezier(0.2, 1.3, 0.35, 1); }
+@keyframes pop-in {
+  0% { transform: scale(0.9); opacity: 0; }
+  60% { transform: scale(1.03); }
+  100% { transform: scale(1); opacity: 1; }
+}
+
 /* ---- Respect reduced-motion preference ---- */
 @media (prefers-reduced-motion: reduce) {
-  * { transition: none !important; }
+  * { transition: none !important; animation: none !important; }
   .progress-fill, .progress-dino { transition: none !important; }
 }

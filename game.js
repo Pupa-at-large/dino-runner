@@ -10,9 +10,12 @@
   const soundBtn = document.getElementById("soundBtn");
 
   const overlay = document.getElementById("overlay");
-  const ovTitle = document.getElementById("ovTitle");
-  const ovSub = document.getElementById("ovSub");
+  const hiScore = document.getElementById("hiScore");
   const levelSelectBtn = document.getElementById("levelSelectBtn");
+
+  const howOverlay = document.getElementById("howOverlay");
+  const overOverlay = document.getElementById("overOverlay");
+  const overStats = document.getElementById("overStats");
 
   const clearOverlay = document.getElementById("clearOverlay");
   const clearKicker = document.getElementById("clearKicker");
@@ -192,9 +195,10 @@
   const GRAV = 0.62, JUMP_V = -11.5, JUMP_V2 = -10.6, MAX_FALL = 16;
   const MILESTONE = 1200;   // world distance between day/night flips
   const dino = { x: 64, y: 0, vy: 0, ducking: false, onGround: true, crashed: false, jumps: 0 };
-  let obstacles = [], clouds = [], particles = [], pops = [];
+  let obstacles = [], clouds = [], particles = [], pops = [], confetti = [];
   let speed, dist, score, night = false, flashT = 0;
   let invertT = 0, pulseT = 0, toastT = 0, toastText = "", lastMilestone = 0;
+  let coachJumped = false, coachDucked = false; // first-level tutorial prompts
   let level = 1, cfg = levelConfig(1);
   let goal = 2200, schedule = [], schedIdx = 0;
   let state = "ready";
@@ -207,12 +211,13 @@
   try { const m = localStorage.getItem("dino_motion"); if (m === "reduce") reduceMotion = true; else if (m === "full") reduceMotion = false; } catch (e) {}
 
   // ---- Persistence ----
-  let unlocked = 1, bestByLevel = {}, chosenSkin = null; // chosenSkin null = always newest
+  let unlocked = 1, bestByLevel = {}, chosenSkin = null, tutorialSeen = false; // chosenSkin null = always newest
   try {
     unlocked = parseInt(localStorage.getItem("dino_unlocked") || "1", 10) || 1;
     bestByLevel = JSON.parse(localStorage.getItem("dino_best") || "{}") || {};
     const sk = localStorage.getItem("dino_skin");
     if (sk != null && sk !== "auto") chosenSkin = parseInt(sk, 10);
+    tutorialSeen = localStorage.getItem("dino_seen") === "1";
   } catch (e) {}
   function saveProgress() {
     try {
@@ -264,9 +269,10 @@
     const built = buildSchedule(LEVEL_PATTERNS[n - 1] || "c ~ c ~ c", cfg.maxSpeed);
     schedule = built.items; goal = built.goal; schedIdx = 0;
     obstacles = []; clouds = []; particles = [];
-    speed = cfg.startSpeed; dist = 0; score = 0; pops = [];
+    speed = cfg.startSpeed; dist = 0; score = 0; pops = []; confetti = [];
     night = false; flashT = 0; finishSpawned = false; midPlayed = false;
     invertT = 0; pulseT = 0; toastT = 0; lastMilestone = 0;
+    coachJumped = false; coachDucked = false;
     dino.ducking = false; dino.crashed = false; dino.jumps = 0; placeDinoGround();
     for (let i = 0; i < 3; i++) clouds.push({ x: Math.random() * BASE_W, y: 24 + Math.random() * 60, s: 0.3 + Math.random() * 0.5 });
     levelEl.textContent = String(n);
@@ -296,18 +302,25 @@
     clearTitle.textContent = level >= TOTAL_LEVELS ? "All levels cleared!" : "Level " + level;
     clearStats.textContent = "Score " + String(s).padStart(5, "0") + " · Best " + String(bestByLevel[level] || s).padStart(5, "0");
     nextBtn.textContent = level >= TOTAL_LEVELS ? "Play again" : "Next level \u2192";
+    refreshHi();
+    spawnConfetti();
     showOverlay(clearOverlay);
     fanfare();
+    if (stageAfter > stageBefore) setTimeout(() => fanfare(), 260); // extra flourish on new form
   }
   function failLevel() {
     state = "over";
     dino.crashed = true;
-    ovTitle.textContent = "Level " + level + " \u2014 try again";
-    ovSub.textContent = "Tap or space to retry";
-    showOverlay(overlay);
+    overStats.textContent = "Level " + level + " \u00b7 Score " + String(Math.floor(score)).padStart(5, "0");
+    showOverlay(overOverlay);
     flashT = reduceMotion ? 0 : 8;
     blip(150, 0.2, "sawtooth");
   }
+  function refreshHi() {
+    let m = 0; for (const k in bestByLevel) if (bestByLevel[k] > m) m = bestByLevel[k];
+    hiScore.textContent = "HI " + String(m).padStart(5, "0");
+  }
+  function showTitle() { state = "ready"; refreshHi(); showOverlay(overlay); render(); }
   function pauseGame() {
     if (state !== "play") return;
     state = "paused";
@@ -319,26 +332,20 @@
     state = "play";
     hideAllOverlays();
   }
-  function goHome() {
-    state = "ready";
-    loadLevel(level);
-    ovTitle.textContent = "Dino Runner";
-    ovSub.textContent = "Tap or press space to start";
-    showOverlay(overlay);
-    render();
-  }
+  function goHome() { loadLevel(level); showTitle(); }
 
   // ---- Overlay helpers ----
-  function hideAllOverlays() { [overlay, clearOverlay, selectOverlay, skinOverlay, pauseOverlay, settingsOverlay].forEach(o => o.classList.add("hidden")); }
+  function hideAllOverlays() { [overlay, howOverlay, clearOverlay, overOverlay, selectOverlay, skinOverlay, pauseOverlay, settingsOverlay].forEach(o => o.classList.add("hidden")); }
   function showOverlay(el) { hideAllOverlays(); el.classList.remove("hidden"); }
 
   // ---- Input ----
   function jump() {
     if (state === "ready" || state === "over") { startLevel(level); return; }
     if (state === "paused") { resumeGame(); return; }
-    if (state !== "play") return; // clear / select / skins / settings
+    if (state !== "play") return; // howto / clear / select / skins / settings
     if (dino.onGround) {
       dino.vy = JUMP_V; dino.onGround = false; dino.jumps = 1; dino.ducking = false;
+      coachJumped = true;
       blip(660, 0.06); puff();
     } else if (dino.jumps === 1) {
       dino.vy = JUMP_V2; dino.jumps = 2;           // double jump — extra height
@@ -346,7 +353,7 @@
     }
   }
   function releaseJump() { /* no-op: height now comes from the double jump */ }
-  function setDuck(v) { if (state === "play" && dino.onGround) dino.ducking = v; }
+  function setDuck(v) { if (state === "play" && dino.onGround) { dino.ducking = v; if (v) coachDucked = true; } }
 
   // ---- Spawning ----
   // Pull scheduled obstacles onto the stage as their world position reaches the
@@ -476,6 +483,44 @@
   function scorePop() {
     if (reduceMotion) return;
     pops.push({ x: dino.x + dino.w + 6, y: dino.y - dino.h - 6, vy: -0.9, life: 36, max: 36 });
+  }
+
+  // Confetti burst on level clear (DESIGN_SPEC §6): accent + ink squares /
+  // circles / diamonds. Ticked every frame (even while paused on the clear
+  // screen) so the celebration animates over the overlay.
+  function spawnConfetti() {
+    confetti = [];
+    if (reduceMotion) return;
+    for (let i = 0; i < 70; i++) {
+      const fromLeft = i % 2 === 0;
+      confetti.push({
+        x: fromLeft ? BASE_W * 0.2 : BASE_W * 0.8,
+        y: GROUND * 0.5,
+        vx: (fromLeft ? 1 : -1) * (1 + Math.random() * 4),
+        vy: -(5 + Math.random() * 7),
+        rot: Math.random() * 6.28, vr: (Math.random() - 0.5) * 0.4,
+        size: 5 + Math.random() * 6,
+        shape: i % 3, hot: i % 2 === 0,
+        life: 70 + Math.random() * 40,
+      });
+    }
+  }
+  function tickConfetti() {
+    if (!confetti.length) return;
+    for (const p of confetti) { p.x += p.vx; p.y += p.vy; p.vy += 0.28; p.vx *= 0.99; p.rot += p.vr; p.life--; }
+    confetti = confetti.filter(p => p.life > 0 && p.y < BASE_H + 30);
+  }
+  function drawConfetti(c) {
+    for (const p of confetti) {
+      ctx.save();
+      ctx.translate(p.x, p.y); ctx.rotate(p.rot);
+      ctx.fillStyle = p.hot ? c.accent : c.ink;
+      const s = p.size;
+      if (p.shape === 0) ctx.fillRect(-s / 2, -s / 2, s, s);
+      else if (p.shape === 1) { ctx.beginPath(); ctx.arc(0, 0, s / 2, 0, Math.PI * 2); ctx.fill(); }
+      else { ctx.beginPath(); ctx.moveTo(0, -s / 2); ctx.lineTo(s / 2, 0); ctx.lineTo(0, s / 2); ctx.lineTo(-s / 2, 0); ctx.closePath(); ctx.fill(); }
+      ctx.restore();
+    }
   }
 
   // ---- Draw: evolution ladder (DESIGN_SPEC §8) ----
@@ -748,6 +793,7 @@
 
     for (const cl of clouds) drawCloud(c, cl);
     drawGround(c);
+    if (state === "ready") drawCactus(c, BASE_W * 0.62, GROUND, 38, 66, false); // title scene
 
     for (const o of obstacles) drawObstacle(o, c);
 
@@ -795,11 +841,40 @@
       ctx.textAlign = "left"; ctx.globalAlpha = 1;
     }
 
+    drawConfetti(c);
+    drawCoach(c);
+
     scoreEl.textContent = String(Math.floor(score)).padStart(5, "0");
+  }
+
+  // First-level coach prompts — point at the first cactus/bird until the
+  // player has performed the matching action. Foolproof onboarding.
+  function coachLabel(c, text, cx, y) {
+    ctx.font = "700 20px 'Space Mono', monospace";
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    const w = ctx.measureText(text).width + 26;
+    ctx.fillStyle = c.accent; rrect(cx - w / 2, y - 16, w, 30, 15);
+    ctx.fillStyle = "#fff"; ctx.fillText(text, cx, y);
+    ctx.fillStyle = c.accent; triBox(cx - 6, y + 14, 12, 8, [[0, 0], [1, 0], [0.5, 1]]);
+    ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
+  }
+  function drawCoach(c) {
+    if (state !== "play" || level !== 1) return;
+    let cactus = null, bird = null;
+    for (const o of obstacles) {
+      if (o.x + o.w < dino.x) continue;
+      if (o.type === "cactus" && !cactus) cactus = o;
+      else if (o.type === "bird" && !bird) bird = o;
+    }
+    if (!coachJumped && cactus && cactus.x > dino.x && cactus.x - dino.x < 380)
+      coachLabel(c, "点一下 跳！", cactus.x + cactus.w / 2, cactus.y - cactus.h - 26);
+    if (!coachDucked && bird && bird.x > dino.x && bird.x - dino.x < 380)
+      coachLabel(c, "↓ 下滑 蹲！", bird.x + bird.w / 2, bird.y - bird.h - 26);
   }
 
   function loop() {
     if (state === "play") update();
+    tickConfetti();   // animates over the clear overlay (state !== play)
     render();
     requestAnimationFrame(loop);
   }
@@ -873,34 +948,38 @@
   stage.addEventListener("pointerup", endTouch);
   stage.addEventListener("pointercancel", () => { if (touch) { clearTimeout(touch.timer); setDuck(false); touch = null; } });
 
-  nextBtn.addEventListener("click", () => {
-    const next = level >= TOTAL_LEVELS ? 1 : level + 1;
-    startLevel(next);
+  // Shared navigation helpers
+  let howFrom = "title";
+  function showSelect() { confetti = []; state = "select"; buildGrid(); showOverlay(selectOverlay); }
+  function showHowTo(from) { howFrom = from; state = "howto"; showOverlay(howOverlay); }
+  function markTutorialSeen() { tutorialSeen = true; try { localStorage.setItem("dino_seen", "1"); } catch (e) {} }
+
+  // Title screen
+  document.getElementById("startBtn").addEventListener("click", () => startLevel(level));
+  document.getElementById("howToBtn").addEventListener("click", () => showHowTo("title"));
+  document.getElementById("howStartBtn").addEventListener("click", () => {
+    markTutorialSeen();
+    if (howFrom === "boot") startLevel(1); else showTitle();
   });
 
-  document.getElementById("resetBtn").addEventListener("click", () => {
-    state = "ready"; loadLevel(level);
-    ovTitle.textContent = "Level " + level;
-    ovSub.textContent = "Tap or press space to start";
-    showOverlay(overlay);
-    render();
-  });
+  // Level clear
+  nextBtn.addEventListener("click", () => startLevel(level >= TOTAL_LEVELS ? 1 : level + 1));
+  document.getElementById("clearLevelsBtn").addEventListener("click", showSelect);
+  document.getElementById("clearHomeBtn").addEventListener("click", goHome);
 
-  levelSelectBtn.addEventListener("click", () => { state = "select"; buildGrid(); showOverlay(selectOverlay); });
-  selectBackBtn.addEventListener("click", () => {
-    state = "ready";
-    ovTitle.textContent = "Dino Runner";
-    ovSub.textContent = "Tap or press space to start";
-    showOverlay(overlay);
-  });
+  // Game over
+  document.getElementById("retryBtn").addEventListener("click", () => startLevel(level));
+  document.getElementById("overLevelsBtn").addEventListener("click", showSelect);
+  document.getElementById("overHomeBtn").addEventListener("click", goHome);
+
+  // Footer "重玩本关" → replay current level immediately
+  document.getElementById("resetBtn").addEventListener("click", () => startLevel(level));
+
+  levelSelectBtn.addEventListener("click", showSelect);
+  selectBackBtn.addEventListener("click", showTitle);
 
   skinsBtn.addEventListener("click", () => { state = "skins"; buildSkinGrid(); showOverlay(skinOverlay); });
-  skinBackBtn.addEventListener("click", () => {
-    state = "ready";
-    ovTitle.textContent = "Dino Runner";
-    ovSub.textContent = "Tap or press space to start";
-    showOverlay(overlay);
-  });
+  skinBackBtn.addEventListener("click", showTitle);
 
   soundBtn.addEventListener("click", () => {
     soundOn = !soundOn;
@@ -913,6 +992,7 @@
   pauseBtn.addEventListener("click", () => { if (state === "play") pauseGame(); else if (state === "paused") resumeGame(); });
   document.getElementById("resumeBtn").addEventListener("click", resumeGame);
   document.getElementById("pauseRestartBtn").addEventListener("click", () => startLevel(level));
+  document.getElementById("pauseLevelsBtn").addEventListener("click", showSelect);
   document.getElementById("pauseHomeBtn").addEventListener("click", goHome);
 
   function refreshSettings() {
@@ -954,6 +1034,9 @@
   // ---- Boot ----
   loadLevel(1);
   resize();
+  refreshHi();
+  // First-time players see the tutorial card before anything else.
+  if (!tutorialSeen) showHowTo("boot");
   render();
   loop();
 

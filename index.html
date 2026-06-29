@@ -20,7 +20,7 @@
       <span id="level" class="hud-value">1</span>
     </div>
     <div class="hud-icons">
-      <button id="pauseBtn" class="icon-btn" aria-label="Pause">II</button>
+      <button id="pauseBtn" class="icon-btn" aria-label="Pause / menu">❚❚</button>
       <button id="soundBtn" class="icon-btn" aria-label="Toggle sound">♪</button>
     </div>
     <div class="hud-item">
@@ -40,16 +40,32 @@
   <div id="stage" class="stage">
     <canvas id="game"></canvas>
 
-    <!-- Title / start overlay -->
-    <div id="overlay" class="overlay">
-      <h1 id="ovTitle" class="overlay-title">Dino Runner</h1>
-      <p id="ovSub" class="overlay-sub">Tap or press space to start</p>
-      <p class="overlay-hint">TAP 跳跃 · 再点一次二段跳 · SWIPE↓ 躲避</p>
-      <div class="overlay-actions">
-        <button id="levelSelectBtn" class="pill-btn">Select level</button>
-        <button id="skinsBtn" class="pill-btn">Forms</button>
-        <button id="titleSettingsBtn" class="pill-btn">Settings</button>
+    <!-- Title / home -->
+    <div id="overlay" class="overlay title-screen">
+      <span id="hiScore" class="hi-score">HI 00000</span>
+      <div class="title-block">
+        <h1 class="game-title">DINO<br />RUNNER</h1>
+        <span class="title-rule"></span>
       </div>
+      <button id="startBtn" class="pill-btn primary cta-big">▶ 开始 / Tap to start</button>
+      <div class="overlay-actions">
+        <button id="levelSelectBtn" class="pill-btn">关卡 Levels</button>
+        <button id="skinsBtn" class="pill-btn">形态 Forms</button>
+        <button id="titleSettingsBtn" class="pill-btn">设置 Settings</button>
+      </div>
+      <button id="howToBtn" class="text-btn">❓ 怎么玩 · How to play</button>
+    </div>
+
+    <!-- How to play (tutorial) -->
+    <div id="howOverlay" class="overlay hidden">
+      <h1 class="overlay-title">怎么玩</h1>
+      <p class="overlay-sub">How to play — 就三招</p>
+      <div class="how-list">
+        <div class="how-row"><span class="how-ico">👆</span><span class="how-txt"><b>点一下 = 跳</b>跳过仙人掌 · Tap to jump</span></div>
+        <div class="how-row"><span class="how-ico">✌️</span><span class="how-txt"><b>空中再点 = 二段跳</b>越过高仙人掌 · Tap again mid-air</span></div>
+        <div class="how-row"><span class="how-ico">👇</span><span class="how-txt"><b>向下滑 = 蹲</b>躲开翼龙 · Swipe down to duck</span></div>
+      </div>
+      <button id="howStartBtn" class="pill-btn primary">知道啦,开始 →</button>
     </div>
 
     <!-- Level clear overlay -->
@@ -58,6 +74,22 @@
       <h1 id="clearTitle" class="overlay-title">Level 1</h1>
       <p id="clearStats" class="overlay-sub">Score 00420 · Best 00500</p>
       <button id="nextBtn" class="pill-btn primary">Next level →</button>
+      <div class="overlay-actions">
+        <button id="clearLevelsBtn" class="pill-btn">关卡 Levels</button>
+        <button id="clearHomeBtn" class="pill-btn">首页 Home</button>
+      </div>
+    </div>
+
+    <!-- Game over overlay -->
+    <div id="overOverlay" class="overlay hidden">
+      <p class="clear-kicker over-kicker">撞到啦 · Game over</p>
+      <h1 class="overlay-title">再试一次</h1>
+      <p id="overStats" class="overlay-sub">Level 1 · Score 00000</p>
+      <button id="retryBtn" class="pill-btn primary">↻ 重试 Retry</button>
+      <div class="overlay-actions">
+        <button id="overLevelsBtn" class="pill-btn">关卡 Levels</button>
+        <button id="overHomeBtn" class="pill-btn">首页 Home</button>
+      </div>
     </div>
 
     <!-- Level select overlay -->
@@ -78,14 +110,15 @@
 
     <!-- Pause overlay -->
     <div id="pauseOverlay" class="overlay hidden">
-      <p class="clear-kicker">Paused</p>
-      <h1 class="overlay-title">II</h1>
+      <p class="clear-kicker">已暂停 · Paused</p>
+      <h1 class="overlay-title pause-glyph">❚❚</h1>
       <p id="pauseStats" class="overlay-sub">Score 00000</p>
-      <button id="resumeBtn" class="pill-btn primary">Resume</button>
+      <button id="resumeBtn" class="pill-btn primary">继续 Resume</button>
       <div class="overlay-actions">
-        <button id="pauseRestartBtn" class="pill-btn">Restart</button>
-        <button id="pauseSettingsBtn" class="pill-btn">Settings</button>
-        <button id="pauseHomeBtn" class="pill-btn">Home</button>
+        <button id="pauseRestartBtn" class="pill-btn">重玩 Restart</button>
+        <button id="pauseLevelsBtn" class="pill-btn">关卡 Levels</button>
+        <button id="pauseSettingsBtn" class="pill-btn">设置 Settings</button>
+        <button id="pauseHomeBtn" class="pill-btn">首页 Home</button>
       </div>
     </div>
 
@@ -102,9 +135,9 @@
   </div>
 
   <footer class="foot">
-    <button id="resetBtn" class="text-btn">Restart level</button>
+    <button id="resetBtn" class="text-btn">重玩本关</button>
     <span class="foot-sep">·</span>
-    <span id="footNote" class="foot-note">TAP jump · double-tap = double jump · SWIPE↓ duck</span>
+    <span id="footNote" class="foot-note">右上角 ❚❚ 随时暂停 / 选关 · 点击跳 · 双击二段跳 · 下滑蹲</span>
   </footer>
 </div>
 
