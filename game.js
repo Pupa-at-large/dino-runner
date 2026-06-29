@@ -57,67 +57,70 @@
   // Spacers:    .  small gap   -  medium gap   ~  large gap   (space is ignored)
   // Spacing is expressed in "jump units" relative to the level's top speed, so
   // every level stays passable regardless of its speed. See buildSchedule().
+  // Tokens: c small cactus · C tall (double-jump) · 2/3 clusters · b bird ·
+  //   _ ground gap (jump across) · ^ wall/step (jump onto the top, then off) ·
+  //   = floating platform · spacers . - ~ (small/medium/large).
   const LEVEL_PATTERNS = [
-    // World 1 — Egg (L1-5): learn to jump, very wide gaps, birds introduced L4
+    // World 1 — Egg (L1-5): learn to jump; a first gap appears
     "c ~~ c ~~ c ~~ c",
-    "c ~ c ~~ C ~ c ~~ c",
-    "c ~ 2 ~ c ~ C ~ 2 ~ c",
-    "c ~ b ~ c ~ b ~ c ~ c",
-    "c ~ C ~ b ~ 2 ~ b ~ c",
-    // World 2 — Cracked egg (L6-10): big cacti + birds settle in
-    "C ~ c - C ~ b ~ 2 ~ C",
-    "2 ~ b ~ C - c ~ b ~ 2 ~ C",
-    "c - c ~ b ~ 2 - C ~ b ~ 3",
-    "C ~ 2 - b ~ C - 2 ~ b ~ C",
-    "b ~ C - 2 - b ~ 3 ~ b ~ C",
-    // World 3 — Legged egg (L11-15): clusters & rhythm, a cactus gauntlet
-    "2 - 2 ~ b ~ 3 - C ~ b ~ 2",
-    "c - c - c ~ b - b ~ 2 - C",
-    "2 - 3 - 2 - C - 3 ~ 2 - 3",
-    "b - C - b - 2 ~ b - C - b",
-    "3 ~ 2 - b - C - 2 - b ~ 3",
+    "c ~ c ~ _ ~ c ~ c",
+    "c ~ 2 ~ _ ~ c ~ C ~ c",
+    "c ~ b ~ _ ~ c ~ b ~ c",
+    "c ~ _ ~ C ~ b ~ _ ~ c",
+    // World 2 — Cracked egg (L6-10): walls (jump onto the top) join in
+    "c ~ ^ ~ c ~ _ ~ C ~ b",
+    "2 ~ _ ~ ^ ~ b ~ c ~ _ ~ c",
+    "c ~ ^ ~ b ~ _ ~ 2 ~ ^ ~ c",
+    "C ~ _ ~ ^ ~ 2 ~ b ~ _ ~ C",
+    "b ~ ^ ~ _ ~ C ~ ^ ~ b ~ _",
+    // World 3 — Legged egg (L11-15): clusters, gaps & walls together
+    "2 - _ ~ ^ ~ b - 3 ~ _ ~ 2",
+    "c - ^ ~ b - _ ~ ^ ~ C - c",
+    "_ ~ ^ ~ 2 - _ ~ ^ ~ 2 - _",
+    "b - ^ ~ _ ~ C - ^ ~ b ~ _",
+    "3 ~ _ ~ ^ ~ b - _ ~ ^ ~ 2",
     // World 4 — Hatchling (L16-20): bird-heavy interludes
-    "C - b - 2 - b - 3 ~ b - C - b",
-    "b - b ~ b - C ~ b - b - 2 ~ b",
-    "2 - C - 3 - b - 2 - C ~ 3 - b",
-    "c - b - c - b - c - b - 2 - C",
-    "3 - C - b - 3 ~ 2 - b - C - 3",
-    // World 5 — Small dino (L21-25): denser, a bird swarm finale
-    "3 - 3 ~ b - C - 3 - b ~ 3 - 2",
-    "C - b - C - b - C - b ~ 3 - 3",
-    "2 - 3 - 2 - 3 ~ b - b - C - 3",
-    "b - 3 - b - 3 - b - C ~ 3 - b",
-    "b - b - b ~ b - b - C ~ b - b - b",
+    "C - b - _ ~ ^ ~ 3 ~ b - _",
+    "b - b ~ ^ ~ _ ~ b - 2 ~ ^",
+    "2 - _ ~ 3 - b - ^ ~ 3 ~ b",
+    "c - b - _ ~ c - ^ ~ b - 2",
+    "3 - ^ ~ b - _ ~ 2 ~ ^ ~ C",
+    // World 5 — Small dino (L21-25): denser, a bird-and-gap finale
+    "3 - _ ~ b - ^ ~ 3 - _ ~ 2",
+    "C - b - ^ ~ _ ~ C - b ~ ^",
+    "2 - 3 ~ _ ~ b - ^ ~ C - _",
+    "b - 3 - ^ ~ _ ~ b - C ~ ^",
+    "b - _ ~ b - ^ ~ b - _ ~ b",
     // World 6 — Runner (L26-30)
-    "3 - C - b - 3 - C - b ~ 3 - 3",
-    "C - 3 - b - C - 3 - b - C - 3",
-    "3 . 2 ~ b - b - 3 - C - 3 - b",
-    "2 - 3 - C - b - 3 - b - C - 3",
-    "3 - b - 3 - b - 3 - b - 3 - C",
+    "3 - ^ ~ b - _ ~ C - ^ ~ 3",
+    "C - 3 ~ _ ~ b - ^ ~ C - _",
+    "3 . 2 ~ ^ ~ b - _ ~ 3 - C",
+    "2 - _ ~ C - b - ^ ~ 3 - _",
+    "3 - b - ^ ~ _ ~ 3 - b ~ ^",
     // World 7 — Crested (L31-35): tighter clusters appear
-    "3 . 3 - b - C - 3 . 2 - b - 3",
-    "C - b - 3 . 3 - b - C - 3 - b",
-    "3 . 3 . 3 ~ b - b - 3 - C - 3",
-    "b - 3 . 2 - b - 3 . C - b - 3",
-    "3 . 3 - b - 3 . 3 - b - C - 3",
+    "3 . _ ~ b - ^ ~ 3 . _ ~ 2",
+    "C - ^ ~ 3 . _ ~ b - C ~ ^",
+    "3 . _ ~ ^ ~ b - 3 - _ ~ C",
+    "b - 3 . ^ ~ _ ~ C - b ~ ^",
+    "3 . ^ ~ b - _ ~ 3 . ^ ~ C",
     // World 8 — Horned (L36-40)
-    "3 . C - b - 3 . 3 - b - C . 3",
-    "C . 3 - b - b - 3 . C - 3 - b",
-    "3 . 3 . 3 - b - C . 3 - b - 3",
-    "b - 3 . 3 - b - 3 . C . 3 - b",
-    "3 . C . 3 - b - b - 3 . 3 - C",
-    // World 9 — Alpha (L41-45): tight gaps everywhere
-    "3 . 3 . b - C . 3 . 3 - b - C",
-    "C . 3 . b - b - 3 . C . 3 - b",
-    "3 . 3 . 3 . b - 3 . C . 3 - b",
-    "b . 3 . 3 - b . 3 . C . 3 . b",
-    "3 . C . 3 . b . 3 . 3 . b . C",
-    // World 10 — Super dino (L46-50): the gauntlet, L50 is a long finale
-    "3 . 3 . b . C . 3 . b . 3 . 3",
-    "C . 3 . b . b . 3 . C . 3 . b",
-    "3 . 3 . 3 . b . C . 3 . b . 3",
-    "b . 3 . C . 3 . b . 3 . C . b",
-    "3 . C . 3 . b . 3 . C . 3 . b . 3 . C",
+    "3 . C - ^ ~ _ ~ 3 - b ~ ^",
+    "C . _ ~ b - ^ ~ 3 . C - _",
+    "3 . _ ~ 3 - ^ ~ C . _ ~ b",
+    "b - ^ ~ _ ~ 3 . C ~ ^ ~ b",
+    "3 . ^ ~ _ ~ b - 3 . _ ~ C",
+    // World 9 — Alpha (L41-45): gaps & walls everywhere
+    "3 . _ ~ ^ ~ C . _ ~ b - ^",
+    "C . ^ ~ b - _ ~ 3 . ^ ~ _",
+    "3 . _ ~ 3 . ^ ~ b - _ ~ C",
+    "b . ^ ~ _ ~ 3 . C ~ _ ~ ^",
+    "3 . ^ ~ _ ~ b . 3 . ^ ~ _",
+    // World 10 — Super dino (L46-50): the gauntlet, L50 a long finale
+    "3 . _ ~ ^ ~ C . _ ~ b . ^",
+    "C . ^ ~ _ ~ b . 3 . ^ ~ _",
+    "3 . _ ~ 3 . ^ ~ C . _ ~ b",
+    "b . ^ ~ _ ~ C . 3 ~ ^ ~ _",
+    "3 . _ ~ ^ ~ C . _ ~ b . ^ ~ _ ~ C",
   ];
 
   // Footprint (world width) of each obstacle, used to advance the cursor.
@@ -133,8 +136,13 @@
   // the level goal distance. `u` is one "jump unit" — the world distance the
   // dino covers during a held jump at this level's top speed — so spacing is
   // speed-invariant and always clearable.
-  function buildSchedule(pattern, maxSpeed) {
-    const u = 44 * maxSpeed;        // ~ airtime (frames) * speed, sized for jumps
+  function buildSchedule(pattern, cfg) {
+    const u = 44 * cfg.maxSpeed;    // ~ airtime (frames) * speed, sized for jumps
+    // A ground gap's WIDTH must be crossable at the SLOWEST the dino ever moves
+    // in this level (startSpeed) — jump reach scales with current speed, and the
+    // dino hits early gaps before it has ramped up. Sizing by maxSpeed (as the
+    // spacing is) would make those gaps wider than the low-speed jump can clear.
+    const gapU = 44 * cfg.startSpeed;
     const BASE_GAP = 1.0 * u;       // implicit land-and-rejump gap
     let cursor = 360;               // lead-in before first obstacle
     const items = [];
@@ -143,7 +151,23 @@
       else if (ch === ".") cursor += 0.30 * u;
       else if (ch === "-") cursor += 0.62 * u;
       else if (ch === "~") cursor += 1.2 * u;
-      else {
+      // ---- platforming elements (Plan B) ----
+      else if (ch === "_") {                 // ground gap — jump across (fall = death)
+        cursor += 0.45 * u;                  // run-up to the edge
+        const w = 0.50 * gapU;               // crossable at the level's min speed
+        items.push({ at: cursor, type: "gap", w });
+        cursor += w + 0.9 * u;               // land + recover past the far edge
+      } else if (ch === "=") {               // floating platform — jump onto, run, drop
+        cursor += 0.5 * u;
+        const w = 1.4 * u;
+        items.push({ at: cursor, type: "platform", w, h: 92 });
+        cursor += w + 0.8 * u;
+      } else if (ch === "^") {               // wall/step — jump onto the top, then off
+        cursor += 0.7 * u;
+        const w = 0.6 * u;                   // a step-sized plateau, not a long mesa
+        items.push({ at: cursor, type: "wall", w, h: 62 });
+        cursor += w + 1.0 * u;
+      } else {
         // Tall cacti need a double jump: isolate them so the player always has
         // room to set it up (before) and recover from its long airtime (after),
         // regardless of the spacer the pattern authored around them.
@@ -192,9 +216,9 @@
   // Double-jump model (DESIGN_SPEC §6): first tap jumps, a second mid-air tap
   // adds height. Tall cacti require the double jump; small ones don't.
   const GRAV = 0.62, JUMP_V = -11.5, JUMP_V2 = -10.6, MAX_FALL = 16;
-  const MILESTONE = 1200;   // world distance between day/night flips
+  const MILESTONE = 5200;   // world distance between day/night flips (calm cadence)
   const dino = { x: 64, y: 0, vy: 0, ducking: false, onGround: true, crashed: false, jumps: 0 };
-  let obstacles = [], clouds = [], particles = [], pops = [], confetti = [];
+  let obstacles = [], clouds = [], particles = [], pops = [], confetti = [], gaps = [];
   let speed, dist, score, night = false, flashT = 0;
   let invertT = 0, pulseT = 0, toastT = 0, toastText = "", lastMilestone = 0;
   // Learn-by-doing tutorial (level 1, first run): freeze the world at the moment
@@ -280,9 +304,9 @@
     level = n; cfg = levelConfig(n);
     tutorialMode = (n === 1 && !tutorialSeen);
     const pattern = tutorialMode ? TUTORIAL_PATTERN : (LEVEL_PATTERNS[n - 1] || "c ~ c ~ c");
-    const built = buildSchedule(pattern, cfg.maxSpeed);
+    const built = buildSchedule(pattern, cfg);
     schedule = built.items; goal = built.goal; schedIdx = 0;
-    obstacles = []; clouds = []; particles = [];
+    obstacles = []; clouds = []; particles = []; gaps = [];
     speed = cfg.startSpeed; dist = 0; score = 0; pops = []; confetti = [];
     night = false; flashT = 0; finishSpawned = false; midPlayed = false;
     invertT = 0; pulseT = 0; toastT = 0; lastMilestone = 0;
@@ -428,6 +452,12 @@
         // One duck-height band: clears a ducking dino, blocks a standing one,
         // and can also be jumped over.
         obstacles.push({ type: "bird", x, y: GROUND - 30, w: 52, h: 34, wing: 0 });
+      } else if (it.type === "gap") {
+        gaps.push({ x, w: it.w });
+      } else if (it.type === "platform") {
+        obstacles.push({ type: "platform", x, y: GROUND - it.h, w: it.w });
+      } else if (it.type === "wall") {
+        obstacles.push({ type: "wall", x, y: GROUND - it.h, w: it.w, h: it.h });
       } else if (it.variant === "tall") {
         obstacles.push({ type: "cactus", variant: "tall", cluster: 1, x, y: GROUND, w: 30, h: 132 });
       } else if (it.variant === "cluster") {
@@ -451,6 +481,12 @@
     if (!near || near.x - dino.x > 150) return null;
     const move = near.type === "bird" ? "duck" : (near.variant === "tall" ? "double" : "jump");
     return taught[move] ? null : move;
+  }
+
+  // Is there solid ground at this screen-x? (false inside a pit)
+  function groundUnder(px) {
+    for (const g of gaps) if (px > g.x + 4 && px < g.x + g.w - 4) return false;
+    return true;
   }
 
   // ---- Update ----
@@ -491,9 +527,30 @@
       obstacles.push({ type: "finish", x: BASE_W + 24, y: GROUND, w: 8, h: 80 });
     }
 
+    const prevFeet = dino.y;
     dino.vy = Math.min(dino.vy + GRAV, MAX_FALL);
     dino.y += dino.vy;
-    if (dino.y >= GROUND) { dino.y = GROUND; dino.vy = 0; if (!dino.onGround) { dino.onGround = true; dino.jumps = 0; puff(); } }
+    // Support: land one-way on the highest platform/wall top under the dino's
+    // centre, else on the ground (unless over a gap). Falling past the ground
+    // with no support = a pit death.
+    const cxp = dino.x + dino.w * 0.5;
+    let surfTop = null;
+    for (const o of obstacles) {
+      if (o.type !== "platform" && o.type !== "wall") continue;
+      if (cxp > o.x && cxp < o.x + o.w && dino.vy >= 0 && prevFeet <= o.y + 1 && dino.y >= o.y) {
+        if (surfTop === null || o.y < surfTop) surfTop = o.y;
+      }
+    }
+    if (surfTop !== null) {
+      dino.y = surfTop; dino.vy = 0;
+      if (!dino.onGround) { dino.onGround = true; dino.jumps = 0; puff(); }
+    } else if (dino.y >= GROUND && groundUnder(cxp)) {
+      dino.y = GROUND; dino.vy = 0;
+      if (!dino.onGround) { dino.onGround = true; dino.jumps = 0; puff(); }
+    } else {
+      dino.onGround = false;
+      if (dino.y > GROUND + 70) { crash(); return; } // fell into a pit
+    }
 
     // Hitbox scales with the active form (DESIGN_SPEC §8).
     const duck = dino.ducking && dino.onGround;
@@ -510,6 +567,8 @@
       if (!o.scored && o.type !== "finish" && o.x + o.w < dino.x) { o.scored = true; scorePop(); }
     }
     obstacles = obstacles.filter(o => o.x + o.w > -10);
+    for (const g of gaps) g.x -= speed;
+    gaps = gaps.filter(g => g.x + g.w > -10);
 
     // Jump-arc trail (DESIGN_SPEC §4): accent dots along the parabola.
     if (!dino.onGround && !reduceMotion) particles.push({ kind: "dot", x: dino.x + dino.w * 0.5, y: dino.y - dino.h * 0.5, vx: -speed * 0.4, vy: 0, r: 3, life: 16, max: 16 });
@@ -528,6 +587,11 @@
       if (o.type === "finish") {
         if (dino.x + dino.w > o.x + o.w / 2) { clearLevel(); return; }
         continue;
+      }
+      if (o.type === "platform") continue;          // one-way; landing handled above, never kills
+      if (o.type === "wall") {                       // smashing into the front face kills
+        if (dino.x + dino.w > o.x + 2 && dino.x < o.x + 2 && dino.y > o.y + 6) { crash(); return; }
+        continue;                                    // top is landable (handled above)
       }
       const pad = 4;
       const ob = { x: o.x + pad, y: o.y, w: o.w - pad * 2, h: o.h - pad };
@@ -846,7 +910,14 @@
     ctx.fillStyle = c.ink;
     for (let i = 0; i < BASE_W + 14; i += 14) {
       const gx = ((i - (dist % 14)) % (BASE_W + 14));
+      if (!groundUnder(gx + 4)) continue;           // leave a hole over gaps
       ctx.fillRect(gx, GROUND + 2, 8, 2);
+    }
+    // edge posts so a pit reads clearly
+    ctx.fillStyle = c.mid;
+    for (const g of gaps) {
+      ctx.fillRect(g.x - 2, GROUND + 2, 3, 12);
+      ctx.fillRect(g.x + g.w - 1, GROUND + 2, 3, 12);
     }
   }
 
@@ -862,8 +933,8 @@
   // Two soft bands of domes drifting slower than the foreground.
   function drawHills(c) {
     const bands = [
-      { base: GROUND - 36, r: 150, gap: 360, par: 0.18, a: 0.18 },
-      { base: GROUND - 8, r: 110, gap: 250, par: 0.34, a: 0.30 },
+      { base: GROUND + 10, r: 86, gap: 300, par: 0.18, a: 0.16 },
+      { base: GROUND + 20, r: 58, gap: 200, par: 0.34, a: 0.26 },
     ];
     ctx.fillStyle = c.secondary;
     for (const band of bands) {
@@ -879,6 +950,25 @@
   }
 
   function drawObstacle(o, c) {
+    if (o.type === "platform") {
+      ctx.fillStyle = c.fg; rrect(o.x, o.y, o.w, 12, 5);
+      ctx.fillStyle = c.mid; rrect(o.x + 4, o.y + 4, o.w - 8, 3, 2); // top groove
+      return;
+    }
+    if (o.type === "wall") {
+      const wh = GROUND - o.y;
+      ctx.fillStyle = c.fg; rrect(o.x, o.y, o.w, wh, 6);
+      // brick seams (in bg) so it reads as a built wall/step, not raised floor
+      ctx.fillStyle = c.bg;
+      ctx.fillRect(o.x + 2, o.y + wh * 0.5, o.w - 4, 2);           // mid course
+      const bw = 46;
+      for (let bx = o.x + bw; bx < o.x + o.w - 6; bx += bw) {
+        ctx.fillRect(bx, o.y + 4, 2, wh * 0.5 - 6);                // upper verticals
+        ctx.fillRect(bx + bw * 0.5, o.y + wh * 0.5 + 2, 2, wh * 0.5 - 6); // lower (offset)
+      }
+      ctx.fillStyle = c.accent; rrect(o.x + o.w * 0.5 - 9, o.y + 5, 18, 3, 1.5); // top accent
+      return;
+    }
     if (o.type === "finish") {
       ctx.fillStyle = c.fg; rrect(o.x, o.y - o.h, 4, o.h, 2);
       const fw = 30, fh = 20, sq = 5;
@@ -1161,6 +1251,7 @@
     window.__dino = {
       get state() { return state; }, get level() { return level; },
       get dino() { return dino; }, get obstacles() { return obstacles; },
+      get gaps() { return gaps; },
       get speed() { return speed; }, get ground() { return GROUND; },
       get goal() { return goal; }, get dist() { return dist; },
       jump, releaseJump, setDuck, next: () => nextBtn.click(),
