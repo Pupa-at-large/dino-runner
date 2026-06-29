@@ -122,9 +122,9 @@ Layout zones top→bottom: status/safe → HUD (score, never blocks track) → p
 
 ---
 
-## 8. Growth path — 50 levels, 10 forms (DinoForm)
+## 8. Growth path — 30 levels, 10 forms + 1 ultimate (DinoForm)
 
-Coordinate box **96 × 100 px**. Evolve every 5 levels. Body = `currentColor`, accent parts = `--hot` (`#E8552D`), eye = `--eye`. Scale ramps `.58 → 1.18` (hitbox scales with it). Accent ornaments only from Lv36+.
+Coordinate box **96 × 100 px**. Evolve every 3 levels (forms at L1/4/7/…/28); an 11th **ultimate** form (神龙, crowned) unlocks by clearing L30. Body = `currentColor`, accent parts = `--hot` (`#E8552D`), eye = `--eye`. Scale ramps `.58 → 1.25` (hitbox scales with it). Accent ornaments only on the later forms.
 
 | Lv | Form | Build |
 |---|---|---|

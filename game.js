@@ -40,15 +40,16 @@
   const progressDino = document.getElementById("progressDino");
 
   // ---- Levels ----
-  const TOTAL_LEVELS = 50;
+  const TOTAL_LEVELS = 30;
 
   // Per-level speed envelope. Pattern spacing is normalised against maxSpeed
   // (see buildSchedule), so a given pattern feels the same at any level.
+  // Tuned so 30 levels ramp to the same top difficulty the old 50 did.
   function levelConfig(n) {
     return {
-      startSpeed: 5.5 + (n - 1) * 0.09,            // L1 5.5  -> L50 ~9.9
-      maxSpeed: Math.min(16, 8.8 + (n - 1) * 0.145), // L1 8.8 -> capped 16
-      accel: 0.0024 + (n - 1) * 0.00002,
+      startSpeed: 5.5 + (n - 1) * 0.15,            // L1 5.5  -> L30 ~9.9
+      maxSpeed: Math.min(16, 8.8 + (n - 1) * 0.245), // L1 8.8 -> capped 16
+      accel: 0.0024 + (n - 1) * 0.00003,
     };
   }
 
@@ -60,71 +61,52 @@
   // Tokens: c small cactus · C tall (double-jump) · 2/3 clusters · b bird ·
   //   _ ground gap (jump across) · ^ wall/step (jump onto the top, then off) ·
   //   = floating platform · spacers . - ~ (small/medium/large).
-  // Each World (5 levels) introduces a new verb, matching the dino's evolution:
-  //  W1 jump+gap · W2 walls · W3 short duck-bar · W4 birds · W5 dense combos
-  //  W6 LONG duck-bar (sustained) · W7-10 full gauntlet, escalating.
+  // 30 levels, 10 Worlds of 3. Each World unlocks a new dino form, and the
+  // mechanics ramp with it: W1 jump+gap · W2 walls+tall · W3 short duck-bar
+  //  W4 birds+clusters · W5 dense combos · W6 LONG duck-bar (sustained)
+  //  W7-W10 full gauntlet, escalating to the L30 finale.
   // Tokens: c/2/3 cacti · C tall(double-jump) · b bird(jump OR duck) · _ gap
   //  ^ wall(jump onto) · v short bar(duck under) · V long bar(hold duck)
   const LEVEL_PATTERNS = [
-    // World 1 — Egg (L1-5): learn to jump; gaps, then a tall & a bird
-    "c ~ c ~ _ ~ c ~ c",
-    "c ~ 2 ~ _ ~ c ~ c",
-    "c ~ _ ~ b ~ c ~ _",
-    "2 ~ _ ~ c ~ C ~ _",
-    "c ~ _ ~ b ~ 2 ~ _ ~ C",
-    // World 2 — Cracked egg (L6-10): walls (jump onto the top) join in
-    "c ~ ^ ~ _ ~ c ~ b",
+    // World 1 — Egg (L1-3): learn to jump; first gaps
+    "c ~ c ~ _ ~ c",
+    "c ~ 2 ~ _ ~ c ~ _",
+    "2 ~ _ ~ c ~ _ ~ 2",
+    // World 2 — Cracked egg (L4-6): walls + the tall (double-jump) cactus
+    "c ~ ^ ~ _ ~ C",
+    "C ~ _ ~ ^ ~ 2 ~ _",
     "2 ~ ^ ~ _ ~ C ~ ^",
-    "c ~ ^ ~ b ~ _ ~ ^ ~ c",
-    "C ~ _ ~ ^ ~ 2 ~ b ~ _",
-    "b ~ ^ ~ _ ~ C ~ ^ ~ b",
-    // World 3 — Legged egg (L11-15): the short duck-bar appears (slide under!)
+    // World 3 — Legged egg (L7-9): the short duck-bar appears (slide under!)
     "c ~ v ~ _ ~ ^ ~ c",
-    "2 ~ v ~ b ~ _ ~ ^",
-    "c ~ ^ ~ v ~ _ ~ C",
-    "v ~ _ ~ ^ ~ v ~ 2",
-    "3 ~ v ~ _ ~ ^ ~ b ~ v",
-    // World 4 — Hatchling (L16-20): bird-heavy, bars & clusters mixed
-    "C - b ~ v ~ _ ~ 3 ~ b",
-    "b ~ b ~ ^ ~ v ~ _ ~ b",
-    "3 ~ _ ~ v ~ b ~ ^ ~ b",
-    "b - ^ ~ v ~ _ ~ 3 ~ b",
-    "3 ~ v ~ b ~ ^ ~ _ ~ C",
-    // World 5 — Small dino (L21-25): denser combos
+    "2 ~ v ~ _ ~ C ~ v",
+    "v ~ _ ~ ^ ~ v ~ 2 ~ _",
+    // World 4 — Hatchling (L10-12): birds + clusters join the mix
+    "3 ~ b ~ v ~ _ ~ ^",
+    "b ~ ^ ~ v ~ _ ~ b ~ 3",
+    "3 ~ _ ~ b ~ v ~ ^ ~ C",
+    // World 5 — Young dino (L13-15): denser combos
     "3 - _ ~ ^ ~ v ~ 3 - _",
     "C - b ~ ^ ~ v ~ _ ~ C",
-    "2 - 3 ~ _ ~ v ~ ^ ~ C",
-    "b - 3 ~ ^ ~ v ~ _ ~ b",
-    "3 ~ _ ~ b ~ v ~ ^ ~ C",
-    // World 6 — Runner (L26-30): the LONG bar — hold the duck through a tunnel
+    "2 - 3 ~ _ ~ v ~ ^ ~ C ~ b",
+    // World 6 — Horned (L16-18): the LONG bar — hold the duck through a tunnel
     "3 - ^ ~ V ~ _ ~ C - b",
     "C ~ _ ~ V ~ ^ ~ 3 ~ b",
-    "2 - _ ~ V ~ b ~ ^ ~ 3",
-    "3 - b ~ V ~ ^ ~ _ ~ C",
-    "b - V ~ _ ~ ^ ~ 3 - v",
-    // World 7 — Crested (L31-35): tighter, more long bars
-    "3 . _ ~ V ~ ^ ~ 3 . v",
-    "C - ^ ~ V ~ 3 . _ ~ b",
-    "3 . _ ~ ^ ~ V ~ b - C",
-    "b - 3 . v ~ _ ~ C ~ V",
-    "3 . v ~ b - _ ~ V ~ C",
-    // World 8 — Horned (L36-40): full mix
+    "2 - _ ~ V ~ b ~ ^ ~ 3 ~ v",
+    // World 7 — Finback (L19-21): full mix
+    "3 . _ ~ ^ ~ V ~ C . _ ~ b",
+    "C - ^ ~ V ~ 3 . _ ~ b ~ v",
+    "3 . _ ~ v ~ ^ ~ V ~ b - C",
+    // World 8 — Twin-horn (L22-24): harder
     "3 . C - ^ ~ V ~ _ ~ 3 ~ b",
     "C . _ ~ v ~ b - ^ ~ V ~ C",
-    "3 . _ ~ 3 - V ~ ^ ~ C ~ b",
-    "b - ^ ~ V ~ _ ~ 3 . C ~ v",
-    "3 . v ~ _ ~ b - 3 . V ~ C",
-    // World 9 — Alpha (L41-45): gauntlet
-    "3 . _ ~ ^ ~ V ~ C . _ ~ b",
-    "C . v ~ b - _ ~ 3 . ^ ~ V",
-    "3 . _ ~ 3 . V ~ b - ^ ~ C",
-    "b . ^ ~ V ~ _ ~ 3 . C ~ v",
-    "3 . v ~ _ ~ b . 3 . V ~ ^",
-    // World 10 — Super dino (L46-50): hardest; L50 a long finale
+    "3 . v ~ _ ~ b - 3 . V ~ ^ ~ C",
+    // World 9 — Blaze (L25-27): gauntlet
     "3 . _ ~ ^ ~ V ~ C . _ ~ b . v",
-    "C . V ~ _ ~ b . 3 . ^ ~ v",
-    "3 . _ ~ 3 . V ~ C . ^ ~ b ~ v",
-    "b . v ~ ^ ~ V ~ C . 3 ~ _",
+    "C . v ~ b - _ ~ 3 . ^ ~ V ~ C",
+    "3 . _ ~ 3 . V ~ b - ^ ~ C ~ v",
+    // World 10 — King → Super dino (L28-30): hardest; L30 a long finale
+    "b . v ~ ^ ~ V ~ C . 3 ~ _ ~ b",
+    "3 . _ ~ ^ ~ V ~ C . v ~ b . _ ~ C",
     "3 . _ ~ ^ ~ V ~ C . _ ~ b . v ~ _ ~ C ~ V",
   ];
 
@@ -268,19 +250,21 @@
   try { const m = localStorage.getItem("dino_motion"); if (m === "reduce") reduceMotion = true; else if (m === "full") reduceMotion = false; } catch (e) {}
 
   // ---- Persistence ----
-  let unlocked = 1, bestByLevel = {}, chosenSkin = null, tutorialSeen = false; // chosenSkin null = always newest
+  let unlocked = 1, bestByLevel = {}, chosenSkin = null, tutorialSeen = false, championUnlocked = false; // chosenSkin null = always newest
   try {
     unlocked = parseInt(localStorage.getItem("dino_unlocked") || "1", 10) || 1;
     bestByLevel = JSON.parse(localStorage.getItem("dino_best") || "{}") || {};
     const sk = localStorage.getItem("dino_skin");
     if (sk != null && sk !== "auto") chosenSkin = parseInt(sk, 10);
     tutorialSeen = localStorage.getItem("dino_seen") === "1";
+    championUnlocked = localStorage.getItem("dino_champion") === "1";
   } catch (e) {}
   function saveProgress() {
     try {
       localStorage.setItem("dino_unlocked", String(unlocked));
       localStorage.setItem("dino_best", JSON.stringify(bestByLevel));
       localStorage.setItem("dino_skin", chosenSkin == null ? "auto" : String(chosenSkin));
+      localStorage.setItem("dino_champion", championUnlocked ? "1" : "0");
     } catch (e) {}
   }
 
@@ -361,6 +345,7 @@
     if (s > prevBest) bestByLevel[level] = s;
     const stageBefore = maxUnlockedStage();
     if (level + 1 <= TOTAL_LEVELS && level + 1 > unlocked) unlocked = level + 1;
+    if (level >= TOTAL_LEVELS) championUnlocked = true;   // beating the final level awakens the ultimate form
     const stageAfter = maxUnlockedStage();
     saveProgress();
     refreshSkinUI(); // newest form follows progress when on auto
@@ -369,9 +354,15 @@
     clearOverlay.classList.toggle("reveal", newForm);
     if (newForm) {
       const evo = EVOLUTIONS[stageAfter];
-      clearKicker.textContent = "✨ 新形态解锁 · NEW FORM";
-      clearTitle.textContent = evo.emoji + " " + evo.name;
-      clearStats.textContent = "你进化啦! · 在「形态」里随时换装";
+      if (evo.ultimate) {
+        clearKicker.textContent = "🏆 通关 · CHAMPION";
+        clearTitle.textContent = evo.emoji + " " + evo.name;
+        clearStats.textContent = "征服全部 30 关 · 觉醒终极形态!";
+      } else {
+        clearKicker.textContent = "✨ 新形态解锁 · NEW FORM";
+        clearTitle.textContent = evo.emoji + " " + evo.name;
+        clearStats.textContent = "你进化啦! · 在「形态」里随时换装";
+      }
     } else {
       clearKicker.textContent = "Level cleared";
       clearTitle.textContent = level >= TOTAL_LEVELS ? "All levels cleared!" : "Level " + level;
@@ -634,13 +625,20 @@
     }
     coins = coins.filter(cn => !cn.taken && cn.x + cn.r > -10);
 
-    // Jump-arc trail (DESIGN_SPEC §4): accent dots along the parabola.
-    if (!dino.onGround && !reduceMotion) particles.push({ kind: "dot", x: dino.x + dino.w * 0.5, y: dino.y - dino.h * 0.5, vx: -speed * 0.4, vy: 0, r: 3, life: 16, max: 16 });
+    // Jump-arc trail (DESIGN_SPEC §4): accent dots along the parabola — richer
+    // and sparklier as the dino evolves (stage 0..10).
+    if (!dino.onGround && !reduceMotion) {
+      const s = effectiveStage(), cx = dino.x + dino.w * 0.5, cy = dino.y - dino.h * 0.5;
+      particles.push({ kind: "dot", x: cx, y: cy, vx: -speed * 0.4, vy: 0, r: 3 + s * 0.18, life: 16, max: 16 });
+      if (s >= 5 && Math.random() < 0.55)
+        particles.push({ kind: "star", x: cx + (Math.random() - 0.5) * 12, y: cy + (Math.random() - 0.5) * 12, vx: -speed * 0.5, vy: (Math.random() - 0.5) * 1.4, r: 2.4 + s * 0.12, life: 18 + s, max: 18 + s, rot: Math.random() * 6.28, vr: (Math.random() - 0.5) * 0.3 });
+    }
 
     for (const c of clouds) { c.x -= c.s * 1.1; if (c.x < -60) { c.x = BASE_W + 30; c.y = 24 + Math.random() * 60; } }
     for (const p of particles) {
       p.x += p.vx; p.y += p.vy; p.life--;
       if (p.kind === "dust") { p.vy += 0.18; p.r += p.vr || 0; }
+      if (p.rot != null) p.rot += p.vr || 0;
     }
     particles = particles.filter(p => p.life > 0);
     for (const sp of pops) { sp.y += sp.vy; sp.life--; }
@@ -685,17 +683,22 @@
     progressDino.style.left = pct + "%";
   }
 
-  // Dust: 3 fading secondary circles at the takeoff/landing foot (DESIGN_SPEC §4).
+  // Dust at the takeoff/landing foot — more & bigger as the dino evolves.
   function puff() {
     if (reduceMotion) return;
-    for (let i = 0; i < 3; i++)
-      particles.push({ kind: "dust", x: dino.x + 6 + i * 5, y: GROUND - 2, r: 5 - i, vr: 0.35, vx: -1 - Math.random(), vy: -0.5, life: 16 + i * 3, max: 16 + i * 3 });
+    const s = effectiveStage(), n = 3 + Math.floor(s / 3);   // 3..6
+    for (let i = 0; i < n; i++)
+      particles.push({ kind: "dust", x: dino.x + 6 + i * 5, y: GROUND - 2, r: (5 - i * 0.6) + s * 0.1, vr: 0.35, vx: -1 - Math.random(), vy: -0.5, life: 16 + i * 3, max: 16 + i * 3 });
   }
-  // A small accent burst on the double jump; the continuous trail is in update().
+  // Accent burst on the double jump — grows into a starry pop at high stages.
   function jumpArc() {
     if (reduceMotion) return;
-    for (let i = 0; i < 4; i++)
+    const s = effectiveStage(), n = 4 + Math.floor(s / 2);
+    for (let i = 0; i < n; i++)
       particles.push({ kind: "dot", x: dino.x + dino.w * 0.5, y: dino.y - dino.h * 0.6 - i * 4, vx: -speed * 0.3, vy: 0, r: 3, life: 18, max: 18 });
+    if (s >= 5)
+      for (let i = 0; i < Math.floor(s / 2); i++)
+        particles.push({ kind: "star", x: dino.x + dino.w * 0.5 + (Math.random() - 0.5) * 26, y: dino.y - dino.h * 0.6 + (Math.random() - 0.5) * 22, vx: -speed * 0.3 + (Math.random() - 0.5) * 2, vy: -1 - Math.random() * 2, r: 3 + s * 0.12, life: 22, max: 22, rot: Math.random() * 6.28, vr: (Math.random() - 0.5) * 0.4 });
   }
   // "+N" score pop floating up in accent (DESIGN_SPEC §4).
   function scorePop() {
@@ -752,20 +755,27 @@
   // 10 forms. kind: egg | hatch | dino. orn flags for the dino base.
   const EVOLUTIONS = [
     { name: "角蛋",   from: 1,  emoji: "🥚", scale: 0.58, kind: "egg" },
-    { name: "破壳",   from: 6,  emoji: "🥚", scale: 0.66, kind: "hatch" },
-    { name: "幼龙",   from: 11, emoji: "🐣", scale: 0.74, kind: "dino", orn: {} },
-    { name: "少年龙", from: 16, emoji: "🦎", scale: 0.82, kind: "dino", orn: { spikes: 1 } },
-    { name: "角龙",   from: 21, emoji: "🦎", scale: 0.90, kind: "dino", orn: { horns: 1 } },
-    { name: "背鳍龙", from: 26, emoji: "🦖", scale: 0.97, kind: "dino", orn: { plates: 1 } },
-    { name: "双角龙", from: 31, emoji: "🦖", scale: 1.04, kind: "dino", orn: { spikes: 1, horns: 2 } },
-    { name: "烈焰龙", from: 36, emoji: "🐉", scale: 1.09, kind: "dino", orn: { crest: 1, tailFlame: 1, belly: 1, accentEye: 1 } },
-    { name: "王者龙", from: 41, emoji: "🐉", scale: 1.13, kind: "dino", orn: { crown: 1, horns: 1, belly: 1, accentEye: 1 } },
-    { name: "巨龙",   from: 46, emoji: "🐲", scale: 1.18, kind: "dino", orn: { plates: 1, crest: 1, horns: 2, wing: 1, belly: 1, accentEye: 1 } },
+    { name: "破壳",   from: 4,  emoji: "🥚", scale: 0.66, kind: "hatch" },
+    { name: "幼龙",   from: 7,  emoji: "🐣", scale: 0.74, kind: "dino", orn: {} },
+    { name: "少年龙", from: 10, emoji: "🦎", scale: 0.82, kind: "dino", orn: { spikes: 1 } },
+    { name: "角龙",   from: 13, emoji: "🦎", scale: 0.90, kind: "dino", orn: { horns: 1 } },
+    { name: "背鳍龙", from: 16, emoji: "🦖", scale: 0.97, kind: "dino", orn: { plates: 1 } },
+    { name: "双角龙", from: 19, emoji: "🦖", scale: 1.04, kind: "dino", orn: { spikes: 1, horns: 2 } },
+    { name: "烈焰龙", from: 22, emoji: "🐉", scale: 1.09, kind: "dino", orn: { crest: 1, tailFlame: 1, belly: 1, accentEye: 1 } },
+    { name: "王者龙", from: 25, emoji: "🐉", scale: 1.13, kind: "dino", orn: { crown: 1, horns: 1, belly: 1, accentEye: 1 } },
+    { name: "巨龙",   from: 28, emoji: "🐲", scale: 1.18, kind: "dino", orn: { plates: 1, crest: 1, horns: 2, wing: 1, belly: 1, accentEye: 1 } },
+    // Ultimate: only unlocked by CLEARING the final level (gated by
+    // championUnlocked, not `unlocked`). Biggest form, crowned & fully ornamented.
+    { name: "神龙", from: 99, emoji: "👑", scale: 1.25, kind: "dino", ultimate: true, orn: { plates: 1, crest: 1, crown: 1, wing: 1, belly: 1, accentEye: 1, tailFlame: 1 } },
   ];
 
   function maxUnlockedStage() {
     let m = 0;
-    for (let i = 0; i < EVOLUTIONS.length; i++) if (EVOLUTIONS[i].from <= unlocked) m = i;
+    for (let i = 0; i < EVOLUTIONS.length; i++) {
+      const e = EVOLUTIONS[i];
+      if (e.ultimate) { if (championUnlocked) m = i; }   // earned by clearing L50
+      else if (e.from <= unlocked) m = i;
+    }
     return m;
   }
   function effectiveStage() {
@@ -938,6 +948,17 @@
     ctx.closePath(); ctx.fill();
   }
   // Triangle from 3 fractional points [0..1] inside a box.
+  // 4-point sparkle (concave star), for the high-stage jump trail.
+  function drawSparkle(x, y, r, rot) {
+    ctx.save(); ctx.translate(x, y); ctx.rotate(rot || 0);
+    ctx.beginPath();
+    for (let i = 0; i < 8; i++) {
+      const ang = i * Math.PI / 4, rr = i % 2 === 0 ? r : r * 0.4;
+      const X = Math.cos(ang) * rr, Y = Math.sin(ang) * rr;
+      if (i === 0) ctx.moveTo(X, Y); else ctx.lineTo(X, Y);
+    }
+    ctx.closePath(); ctx.fill(); ctx.restore();
+  }
   function triBox(L, T, W, H, pts) {
     ctx.beginPath();
     for (let i = 0; i < pts.length; i++) {
@@ -949,10 +970,48 @@
 
   // Cactus into box (left x, ground gy, width W, height H). Ratios from the
   // spec's 72×68 cactus box; `bush` adds the second trunk.
+  // Ground hazards re-skin every 2 worlds, matching the dino's evolution:
+  //  0 cactus · 1 rock · 2 crystal · 3 bone · 4 obsidian.
+  function terrainTier() { return Math.min(4, Math.floor((level - 1) / 6)); }
   function drawCactus(c, x, gy, W, H, bush) {
     const top = gy - H;
     const px = L => x + (L / 72) * W, py = T => top + (T / 68) * H;
     const pw = w => (w / 72) * W, ph = h => (h / 68) * H, pr = r => (r / 72) * W;
+    const tri = pts => triBox(x, top, W, H, pts);
+    const tier = terrainTier();
+    if (tier === 1) {                       // ROCK — chunky boulder with peaks
+      ctx.fillStyle = c.fg;
+      rrect(px(6), py(32), pw(60), ph(36), pr(9));
+      tri([[0.06, 0.56], [0.34, 0.02], [0.52, 0.56]]);
+      tri([[0.46, 0.56], [0.74, 0.16], [0.96, 0.56]]);
+      return;
+    }
+    if (tier === 2) {                       // CRYSTAL — sharp shards, accent tip
+      ctx.fillStyle = c.fg;
+      tri([[0.02, 1], [0.2, 0.18], [0.36, 1]]);
+      tri([[0.3, 1], [0.5, 0.0], [0.72, 1]]);
+      tri([[0.64, 1], [0.82, 0.26], [0.98, 1]]);
+      ctx.fillStyle = c.accent;
+      tri([[0.42, 0.4], [0.5, 0.0], [0.58, 0.4]]);
+      return;
+    }
+    if (tier === 3) {                       // BONE — totem shaft with knobs
+      ctx.fillStyle = c.fg;
+      rrect(px(29), py(8), pw(14), ph(54), pr(5));
+      rrect(px(22), py(3), pw(12), ph(13), pr(6)); rrect(px(38), py(3), pw(12), ph(13), pr(6));
+      rrect(px(22), py(52), pw(12), ph(13), pr(6)); rrect(px(38), py(52), pw(12), ph(13), pr(6));
+      ctx.fillStyle = c.accent; rrect(px(27), py(31), pw(18), ph(4), pr(2));
+      return;
+    }
+    if (tier === 4) {                       // OBSIDIAN — jagged shard, accent glint
+      ctx.fillStyle = c.fg;
+      tri([[0.5, 0.0], [0.96, 0.62], [0.5, 1]]);
+      tri([[0.5, 0.0], [0.04, 0.62], [0.5, 1]]);
+      ctx.fillStyle = c.accent;
+      tri([[0.5, 0.06], [0.84, 0.56], [0.62, 0.56]]);
+      return;
+    }
+    // tier 0 — classic cactus
     ctx.fillStyle = c.fg;
     rrect(px(30), py(6), pw(13), ph(58), pr(5));
     rrect(px(18), py(30), pw(15), ph(9), pr(4));
@@ -1123,12 +1182,17 @@
     for (const o of obstacles) drawObstacle(o, c);
     drawCoins(c);
 
-    // particles: dust (secondary circles) + jump-arc dots (accent)
+    // particles: dust (secondary circles), jump-arc dots + sparkle stars (accent)
     for (const p of particles) {
       const a = Math.max(0, p.life / (p.max || 16));
-      ctx.globalAlpha = p.kind === "dot" ? Math.max(0.3, a) : 0.5 * a;
-      ctx.fillStyle = p.kind === "dot" ? c.accent : c.secondary;
-      ctx.beginPath(); ctx.arc(p.x, p.y, p.r || 3, 0, Math.PI * 2); ctx.fill();
+      if (p.kind === "star") {
+        ctx.globalAlpha = Math.max(0.35, a); ctx.fillStyle = c.accent;
+        drawSparkle(p.x, p.y, p.r || 3, p.rot || 0);
+      } else {
+        ctx.globalAlpha = p.kind === "dot" ? Math.max(0.3, a) : 0.5 * a;
+        ctx.fillStyle = p.kind === "dot" ? c.accent : c.secondary;
+        ctx.beginPath(); ctx.arc(p.x, p.y, p.r || 3, 0, Math.PI * 2); ctx.fill();
+      }
     }
     ctx.globalAlpha = 1;
 
@@ -1242,8 +1306,9 @@
       const cell = document.createElement("button");
       cell.className = "skin-cell" + (locked ? " locked" : "") + (!locked && i === active ? " active" : "");
       const glyph = locked ? "🔒" : evo.emoji;
+      const lockLabel = evo.ultimate ? "通关 L30" : "Level " + evo.from;
       cell.innerHTML = '<span class="skin-emoji">' + glyph + '</span>' +
-        '<span class="skin-name">' + (locked ? "Level " + evo.from : evo.name) + '</span>';
+        '<span class="skin-name">' + (locked ? lockLabel : evo.name) + '</span>';
       if (!locked) cell.addEventListener("click", () => {
         chosenSkin = (i === max) ? null : i; // picking the newest returns to auto
         saveProgress(); refreshSkinUI(); buildSkinGrid(); blip(560, 0.06);
@@ -1343,7 +1408,7 @@
     refreshSettings();
   });
   document.getElementById("setResetBtn").addEventListener("click", () => {
-    unlocked = 1; bestByLevel = {}; chosenSkin = null; saveProgress();
+    unlocked = 1; bestByLevel = {}; chosenSkin = null; championUnlocked = false; saveProgress();
     try { localStorage.removeItem("dino_motion"); } catch (e) {}
     refreshSkinUI(); blip(330, 0.12, "sawtooth");
     goHome();
