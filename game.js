@@ -292,7 +292,7 @@
 
   // ---- Resize ----
   function resize() {
-    const rect = stage.getBoundingClientRect();
+    const rect = cv.getBoundingClientRect();
     dpr = Math.min(window.devicePixelRatio || 1, 2);
     BASE_H = Math.max(180, Math.round((BASE_W * rect.height) / rect.width));
     GROUND = BASE_H - GROUND_OFFSET;
