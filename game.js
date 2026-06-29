@@ -190,7 +190,7 @@
   // ---- Logical resolution ----
   const BASE_W = 720;
   let BASE_H = 240;
-  const GROUND_OFFSET = 40;
+  const GROUND_OFFSET = 54;   // raised a little to leave room for pit spikes
   let GROUND = BASE_H - GROUND_OFFSET;
   let scale = 1, dpr = 1;
 
@@ -549,7 +549,7 @@
       if (!dino.onGround) { dino.onGround = true; dino.jumps = 0; puff(); }
     } else {
       dino.onGround = false;
-      if (dino.y > GROUND + 70) { crash(); return; } // fell into a pit
+      if (dino.y > GROUND + 40) { crash(); return; } // fell onto the pit spikes
     }
 
     // Hitbox scales with the active form (DESIGN_SPEC §8).
@@ -913,11 +913,22 @@
       if (!groundUnder(gx + 4)) continue;           // leave a hole over gaps
       ctx.fillRect(gx, GROUND + 2, 8, 2);
     }
-    // edge posts so a pit reads clearly
-    ctx.fillStyle = c.mid;
+    // Pits read as an obvious hazard: bold ink lips on each broken edge plus a
+    // row of accent spikes at the bottom, visible well before the dino arrives.
+    const lipH = 11, top = GROUND + 13, baseY = GROUND + 31, sw = 15;
     for (const g of gaps) {
-      ctx.fillRect(g.x - 2, GROUND + 2, 3, 12);
-      ctx.fillRect(g.x + g.w - 1, GROUND + 2, 3, 12);
+      const left = g.x, right = g.x + g.w;
+      ctx.fillStyle = c.ink;
+      ctx.fillRect(left - 4, GROUND, 4, lipH);
+      ctx.fillRect(right, GROUND, 4, lipH);
+      ctx.fillStyle = c.accent;
+      ctx.beginPath();
+      for (let sx = left + 2; sx + sw <= right - 2; sx += sw) {
+        ctx.moveTo(sx, baseY);
+        ctx.lineTo(sx + sw / 2, top);
+        ctx.lineTo(sx + sw, baseY);
+      }
+      ctx.fill();
     }
   }
 
