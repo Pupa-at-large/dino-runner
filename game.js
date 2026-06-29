@@ -1002,9 +1002,6 @@
   document.getElementById("overLevelsBtn").addEventListener("click", showSelect);
   document.getElementById("overHomeBtn").addEventListener("click", goHome);
 
-  // Footer "重玩本关" → replay current level immediately
-  document.getElementById("resetBtn").addEventListener("click", () => startLevel(level));
-
   levelSelectBtn.addEventListener("click", showSelect);
   selectBackBtn.addEventListener("click", showTitle);
 
