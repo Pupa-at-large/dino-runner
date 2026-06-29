@@ -13,7 +13,6 @@
   const hiScore = document.getElementById("hiScore");
   const levelSelectBtn = document.getElementById("levelSelectBtn");
 
-  const howOverlay = document.getElementById("howOverlay");
   const overOverlay = document.getElementById("overOverlay");
   const overStats = document.getElementById("overStats");
 
@@ -198,8 +197,15 @@
   let obstacles = [], clouds = [], particles = [], pops = [], confetti = [];
   let speed, dist, score, night = false, flashT = 0;
   let invertT = 0, pulseT = 0, toastT = 0, toastText = "", lastMilestone = 0;
-  let coachJumped = false, coachDucked = false; // first-level tutorial prompts
+  // Learn-by-doing tutorial (level 1, first run): freeze the world at the moment
+  // a new move is needed, show an animated gesture prompt, resume on input.
+  let tutorialMode = false;                       // level 1 && !tutorialSeen
+  let teach = null;                               // null | "jump" | "double" | "duck"
+  let teachTaps = 0, duckHold = 0;
+  const taught = { jump: false, double: false, duck: false };
+  let uiTick = 0;                                 // frame counter for UI pulses
   let dyingT = 0;                                 // death-animation countdown
+  let revealStage = null;                          // form index to showcase on the clear screen
   let level = 1, cfg = levelConfig(1);
   let goal = 2200, schedule = [], schedIdx = 0;
   let state = "ready";
@@ -265,15 +271,24 @@
   function placeDinoGround() { dino.y = GROUND; dino.vy = 0; dino.onGround = true; }
 
   // ---- Level lifecycle ----
+  // First-run level 1 is a guided lane that teaches the three moves in order
+  // (jump → double jump → duck) with generous spacing; the freeze logic lives
+  // in update(). Returning players get the gentle normal level 1.
+  const TUTORIAL_PATTERN = "c ~~~ C ~~~ b ~~~";
+
   function loadLevel(n) {
     level = n; cfg = levelConfig(n);
-    const built = buildSchedule(LEVEL_PATTERNS[n - 1] || "c ~ c ~ c", cfg.maxSpeed);
+    tutorialMode = (n === 1 && !tutorialSeen);
+    const pattern = tutorialMode ? TUTORIAL_PATTERN : (LEVEL_PATTERNS[n - 1] || "c ~ c ~ c");
+    const built = buildSchedule(pattern, cfg.maxSpeed);
     schedule = built.items; goal = built.goal; schedIdx = 0;
     obstacles = []; clouds = []; particles = [];
     speed = cfg.startSpeed; dist = 0; score = 0; pops = []; confetti = [];
     night = false; flashT = 0; finishSpawned = false; midPlayed = false;
     invertT = 0; pulseT = 0; toastT = 0; lastMilestone = 0;
-    coachJumped = false; coachDucked = false;
+    teach = null; teachTaps = 0; duckHold = 0;
+    taught.jump = taught.double = taught.duck = false;
+    revealStage = null; clearOverlay.classList.remove("reveal");
     dino.ducking = false; dino.crashed = false; dino.jumps = 0; placeDinoGround();
     for (let i = 0; i < 3; i++) clouds.push({ x: Math.random() * BASE_W, y: 24 + Math.random() * 60, s: 0.3 + Math.random() * 0.5 });
     levelEl.textContent = String(n);
@@ -289,6 +304,7 @@
   }
   function clearLevel() {
     state = "clear";
+    if (tutorialMode) markTutorialSeen();   // guided level 1 done — don't teach again
     const prevBest = bestByLevel[level] || 0;
     const s = Math.floor(score);
     if (s > prevBest) bestByLevel[level] = s;
@@ -297,17 +313,25 @@
     const stageAfter = maxUnlockedStage();
     saveProgress();
     refreshSkinUI(); // newest form follows progress when on auto
-    clearKicker.textContent = stageAfter > stageBefore
-      ? "New form — " + EVOLUTIONS[stageAfter].emoji + " " + EVOLUTIONS[stageAfter].name
-      : "Level cleared";
-    clearTitle.textContent = level >= TOTAL_LEVELS ? "All levels cleared!" : "Level " + level;
-    clearStats.textContent = "Score " + String(s).padStart(5, "0") + " · Best " + String(bestByLevel[level] || s).padStart(5, "0");
+    const newForm = stageAfter > stageBefore;
+    revealStage = newForm ? stageAfter : null;          // showcase the new dino on canvas
+    clearOverlay.classList.toggle("reveal", newForm);
+    if (newForm) {
+      const evo = EVOLUTIONS[stageAfter];
+      clearKicker.textContent = "✨ 新形态解锁 · NEW FORM";
+      clearTitle.textContent = evo.emoji + " " + evo.name;
+      clearStats.textContent = "你进化啦! · 在「形态」里随时换装";
+    } else {
+      clearKicker.textContent = "Level cleared";
+      clearTitle.textContent = level >= TOTAL_LEVELS ? "All levels cleared!" : "Level " + level;
+      clearStats.textContent = "Score " + String(s).padStart(5, "0") + " · Best " + String(bestByLevel[level] || s).padStart(5, "0");
+    }
     nextBtn.textContent = level >= TOTAL_LEVELS ? "Play again" : "Next level \u2192";
     refreshHi();
     spawnConfetti();
     showOverlay(clearOverlay);
     fanfare();
-    if (stageAfter > stageBefore) setTimeout(() => fanfare(), 260); // extra flourish on new form
+    if (newForm) setTimeout(() => fanfare(), 260); // extra flourish on new form
   }
   // Crash \u2192 a brief "death" beat on the playfield (frozen scene, crashed dino
   // pops and topples) before the Game over screen slides in.
@@ -357,25 +381,39 @@
   function goHome() { loadLevel(level); showTitle(); }
 
   // ---- Overlay helpers ----
-  function hideAllOverlays() { [overlay, howOverlay, clearOverlay, overOverlay, selectOverlay, skinOverlay, pauseOverlay, settingsOverlay].forEach(o => o.classList.add("hidden")); }
+  function hideAllOverlays() { [overlay, clearOverlay, overOverlay, selectOverlay, skinOverlay, pauseOverlay, settingsOverlay].forEach(o => o.classList.add("hidden")); }
   function showOverlay(el) { hideAllOverlays(); el.classList.remove("hidden"); }
 
   // ---- Input ----
+  function doJump(v, jumps) { dino.vy = v; dino.onGround = false; dino.jumps = jumps; dino.ducking = false; puff(); }
+  // Resolve a tutorial lesson when the world is frozen waiting for the move.
+  function teachInput(kind) {
+    if (teach === "jump" && kind === "tap") { taught.jump = true; teach = null; doJump(JUMP_V, 1); blip(660, 0.06); }
+    else if (teach === "double" && kind === "tap") {
+      if (++teachTaps >= 2) { taught.double = true; teach = null; teachTaps = 0; doJump(-14, 2); blip(880, 0.06); }
+      else blip(660, 0.06);
+    } else if (teach === "duck" && kind === "duck") { taught.duck = true; teach = null; duckHold = 42; blip(523, 0.06); }
+  }
   function jump() {
     if (state === "ready" || state === "over") { startLevel(level); return; }
     if (state === "paused") { resumeGame(); return; }
     if (state !== "play") return; // howto / clear / select / skins / settings
+    if (teach) { teachInput("tap"); return; }
     if (dino.onGround) {
       dino.vy = JUMP_V; dino.onGround = false; dino.jumps = 1; dino.ducking = false;
-      coachJumped = true;
+      if (tutorialMode) taught.jump = true;        // self-taught before the freeze
       blip(660, 0.06); puff();
     } else if (dino.jumps === 1) {
       dino.vy = JUMP_V2; dino.jumps = 2;           // double jump — extra height
+      if (tutorialMode) taught.double = true;
       blip(880, 0.06); jumpArc();
     }
   }
   function releaseJump() { /* no-op: height now comes from the double jump */ }
-  function setDuck(v) { if (state === "play" && dino.onGround) { dino.ducking = v; if (v) coachDucked = true; } }
+  function setDuck(v) {
+    if (teach) { if (v) teachInput("duck"); return; }
+    if (state === "play" && dino.onGround) { dino.ducking = v; if (v && tutorialMode) taught.duck = true; }
+  }
 
   // ---- Spawning ----
   // Pull scheduled obstacles onto the stage as their world position reaches the
@@ -402,8 +440,31 @@
     }
   }
 
+  // Which move the nearest oncoming obstacle needs, if it's at teaching range
+  // and not yet taught (tutorial only).
+  function pendingLesson() {
+    let near = null;
+    for (const o of obstacles) {
+      if (o.type === "finish" || o.x + o.w <= dino.x) continue;
+      if (!near || o.x < near.x) near = o;
+    }
+    if (!near || near.x - dino.x > 150) return null;
+    const move = near.type === "bird" ? "duck" : (near.variant === "tall" ? "double" : "jump");
+    return taught[move] ? null : move;
+  }
+
   // ---- Update ----
   function update() {
+    // Learn-by-doing: freeze the world at the moment a new move is needed.
+    if (tutorialMode && !teach) { const m = pendingLesson(); if (m) { teach = m; teachTaps = 0; } }
+    if (teach) {
+      dino.vy = Math.min(dino.vy + GRAV, MAX_FALL); // only the dino animates while frozen
+      dino.y += dino.vy;
+      if (dino.y >= GROUND) { dino.y = GROUND; dino.vy = 0; dino.onGround = true; dino.jumps = 0; }
+      return;
+    }
+    if (duckHold > 0) { duckHold--; if (dino.onGround) dino.ducking = true; }
+
     dist += speed;
     score += speed * 0.08;
     if (speed < cfg.maxSpeed) speed += cfg.accel;
@@ -697,6 +758,16 @@
     ctx.stroke();
   }
 
+  // Draw an arbitrary standing form into a given box (used by the live dino and
+  // the new-form showcase on the clear screen).
+  function drawFormAt(c, evo, B) {
+    if (evo.kind === "egg") { drawEgg(c, B, false); return; }
+    if (evo.kind === "hatch") { drawHatch(c, B, false); return; }
+    const o = evo.orn || {};
+    if (o.wing) drawWing(c, B);
+    dinoBase(c, B, !!o.accentEye);
+    drawDinoOrnaments(c, B, o);
+  }
   function drawDino(baseC) {
     const evo = EVOLUTIONS[effectiveStage()];
     const crash = dino.crashed;
@@ -706,13 +777,17 @@
     if (evo.kind === "egg") { drawEgg(c, B, duck); }
     else if (evo.kind === "hatch") { drawHatch(c, B, duck); }
     else if (duck) { drawDuckForm(c, B); }
-    else {
-      const o = evo.orn || {};
-      if (o.wing) drawWing(c, B);
-      dinoBase(c, B, !!o.accentEye);
-      drawDinoOrnaments(c, B, o);
-    }
+    else { drawFormAt(c, evo, B); }
     if (crash) crashEye(c, B);
+  }
+  // Big centred showcase of a newly-unlocked form, with a gentle bob.
+  function drawFormShowcase(c, idx) {
+    const evo = EVOLUTIONS[idx];
+    const unit = PXU * evo.scale * 2.6;
+    const boxW = 96 * unit, boxH = 100 * unit;
+    const bob = Math.sin(uiTick * 0.12) * 6;
+    const B = { unit, boxW, boxH, boxLeft: BASE_W / 2 - boxW / 2, boxTop: BASE_H * 0.46 - 0.91 * boxH + bob };
+    drawFormAt(c, evo, B);
   }
   function refreshSkinUI() { progressDino.textContent = EVOLUTIONS[effectiveStage()].emoji; }
 
@@ -783,6 +858,26 @@
     rrect(x + (40 / 72) * W, y + 8, (26 / 72) * W, 13, 7);
   }
 
+  // Parallax rolling hills to give the scene depth (fills the empty middle).
+  // Two soft bands of domes drifting slower than the foreground.
+  function drawHills(c) {
+    const bands = [
+      { base: GROUND - 36, r: 150, gap: 360, par: 0.18, a: 0.18 },
+      { base: GROUND - 8, r: 110, gap: 250, par: 0.34, a: 0.30 },
+    ];
+    ctx.fillStyle = c.secondary;
+    for (const band of bands) {
+      ctx.globalAlpha = band.a;
+      const off = ((dist * band.par) % band.gap + band.gap) % band.gap;
+      for (let x = -off; x < BASE_W + band.gap; x += band.gap) {
+        ctx.beginPath();
+        ctx.arc(x + band.gap / 2, band.base, band.r, Math.PI, 2 * Math.PI);
+        ctx.fill();
+      }
+    }
+    ctx.globalAlpha = 1;
+  }
+
   function drawObstacle(o, c) {
     if (o.type === "finish") {
       ctx.fillStyle = c.fg; rrect(o.x, o.y - o.h, 4, o.h, 2);
@@ -808,6 +903,7 @@
   }
 
   function render() {
+    uiTick++;
     const c = theme();
     ctx.fillStyle = flashT > 0 && Math.floor(flashT) % 2 === 0 ? c.fg : c.bg;
     ctx.fillRect(0, 0, BASE_W, BASE_H);
@@ -820,6 +916,7 @@
       ctx.fillStyle = c.bg; ctx.beginPath(); ctx.arc(BASE_W - 64, 42, 11, 0, Math.PI * 2); ctx.fill();
     }
 
+    drawHills(c);
     for (const cl of clouds) drawCloud(c, cl);
     drawGround(c);
     if (state === "ready") drawCactus(c, BASE_W * 0.62, GROUND, 38, 66, false); // title scene
@@ -870,35 +967,35 @@
       ctx.textAlign = "left"; ctx.globalAlpha = 1;
     }
 
+    if (state === "clear" && revealStage != null) drawFormShowcase(c, revealStage);
     drawConfetti(c);
-    drawCoach(c);
+    drawTeachPrompt(c);
 
     scoreEl.textContent = String(Math.floor(score)).padStart(5, "0");
   }
 
-  // First-level coach prompts — point at the first cactus/bird until the
-  // player has performed the matching action. Foolproof onboarding.
-  function coachLabel(c, text, cx, y) {
-    ctx.font = "700 20px 'Space Mono', monospace";
+  // Learn-by-doing prompt: a minimal animated gesture above the dino, shown
+  // only while the world is frozen waiting for that move (DESIGN_SPEC-style,
+  // no wall of text — like Subway Surfers / Temple Run).
+  function drawTeachPrompt(c) {
+    if (!teach) return;
+    const cx = dino.x + dino.w / 2, cy = dino.y - dino.h - 64;
+    const pulse = 1 + 0.10 * Math.sin(uiTick * 0.2);
+    const bob = Math.sin(uiTick * 0.2) * 4;
+    ctx.save();
+    ctx.translate(cx, cy); ctx.scale(pulse, pulse);
+    ctx.globalAlpha = 0.15; ctx.fillStyle = c.accent;
+    ctx.beginPath(); ctx.arc(0, 4, 36, 0, Math.PI * 2); ctx.fill();
+    ctx.globalAlpha = 1; ctx.fillStyle = c.accent;
+    if (teach === "duck") triBox(-13, -6 - bob, 26, 15, [[0, 0], [1, 0], [0.5, 1]]);
+    else { triBox(-13, -2 + bob, 26, 15, [[0.5, 0], [1, 1], [0, 1]]); if (teach === "double") triBox(-13, -18 + bob, 26, 15, [[0.5, 0], [1, 1], [0, 1]]); }
+    ctx.restore();
+    const word = teach === "duck" ? "蹲 / ↓" : teach === "double" ? (teachTaps >= 1 ? "再来一下!" : "连点两下") : "跳 / TAP";
+    ctx.fillStyle = c.accent;
+    ctx.font = "700 22px 'Space Grotesk', sans-serif";
     ctx.textAlign = "center"; ctx.textBaseline = "middle";
-    const w = ctx.measureText(text).width + 26;
-    ctx.fillStyle = c.accent; rrect(cx - w / 2, y - 16, w, 30, 15);
-    ctx.fillStyle = "#fff"; ctx.fillText(text, cx, y);
-    ctx.fillStyle = c.accent; triBox(cx - 6, y + 14, 12, 8, [[0, 0], [1, 0], [0.5, 1]]);
+    ctx.fillText(word, cx, cy + 30);
     ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
-  }
-  function drawCoach(c) {
-    if (state !== "play" || level !== 1) return;
-    let cactus = null, bird = null;
-    for (const o of obstacles) {
-      if (o.x + o.w < dino.x) continue;
-      if (o.type === "cactus" && !cactus) cactus = o;
-      else if (o.type === "bird" && !bird) bird = o;
-    }
-    if (!coachJumped && cactus && cactus.x > dino.x && cactus.x - dino.x < 380)
-      coachLabel(c, "点一下 跳！", cactus.x + cactus.w / 2, cactus.y - cactus.h - 26);
-    if (!coachDucked && bird && bird.x > dino.x && bird.x - dino.x < 380)
-      coachLabel(c, "↓ 下滑 蹲！", bird.x + bird.w / 2, bird.y - bird.h - 26);
   }
 
   function loop() {
@@ -979,18 +1076,11 @@
   stage.addEventListener("pointercancel", () => { if (touch) { clearTimeout(touch.timer); setDuck(false); touch = null; } });
 
   // Shared navigation helpers
-  let howFrom = "title";
   function showSelect() { confetti = []; state = "select"; buildGrid(); showOverlay(selectOverlay); }
-  function showHowTo(from) { howFrom = from; state = "howto"; showOverlay(howOverlay); }
   function markTutorialSeen() { tutorialSeen = true; try { localStorage.setItem("dino_seen", "1"); } catch (e) {} }
 
   // Title screen
   document.getElementById("startBtn").addEventListener("click", () => startLevel(level));
-  document.getElementById("howToBtn").addEventListener("click", () => showHowTo("title"));
-  document.getElementById("howStartBtn").addEventListener("click", () => {
-    markTutorialSeen();
-    if (howFrom === "boot") startLevel(1); else showTitle();
-  });
 
   // Level clear
   nextBtn.addEventListener("click", () => startLevel(level >= TOTAL_LEVELS ? 1 : level + 1));
@@ -1062,8 +1152,6 @@
   loadLevel(1);
   resize();
   refreshHi();
-  // First-time players see the tutorial card before anything else.
-  if (!tutorialSeen) showHowTo("boot");
   render();
   loop();
 
