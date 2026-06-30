@@ -21,6 +21,7 @@
   const clearKicker = document.getElementById("clearKicker");
   const clearTitle = document.getElementById("clearTitle");
   const clearStats = document.getElementById("clearStats");
+  const clearForm = document.getElementById("clearForm");
   const nextBtn = document.getElementById("nextBtn");
 
   const selectOverlay = document.getElementById("selectOverlay");
@@ -329,7 +330,7 @@
     invertT = 0; pulseT = 0; toastT = 0; lastMilestone = 0;
     teach = null; teachTaps = 0; duckHold = 0;
     taught.jump = taught.double = taught.duck = false;
-    revealStage = null; clearOverlay.classList.remove("reveal");
+    revealStage = null; clearOverlay.classList.remove("reveal"); clearForm.classList.add("hidden");
     dino.ducking = false; dino.crashed = false; dino.jumps = 0; placeDinoGround();
     for (let i = 0; i < 3; i++) clouds.push({ x: Math.random() * BASE_W, y: 24 + Math.random() * 60, s: 0.3 + Math.random() * 0.5 });
     levelEl.textContent = String(n);
@@ -357,8 +358,10 @@
     saveProgress();
     refreshSkinUI(); // newest form follows progress when on auto
     const newForm = stageAfter > stageBefore;
-    revealStage = newForm ? stageAfter : null;          // showcase the new dino on canvas
+    revealStage = null;
     clearOverlay.classList.toggle("reveal", newForm);
+    clearForm.classList.toggle("hidden", !newForm);
+    if (newForm) renderFormThumb(clearForm, stageAfter, 132, 124);  // real art, in the overlay flow (no overlap)
     if (newForm) {
       const evo = EVOLUTIONS[stageAfter];
       if (evo.ultimate) {
@@ -959,12 +962,14 @@
   // Render a form's ACTUAL drawn art into a small canvas, so the Forms picker
   // shows the real character (not an Apple emoji). Temporarily swaps the global
   // ctx to the thumbnail's context and forces a clean standing pose.
-  function renderFormThumb(canvas, idx) {
-    const W = 46, H = 44, d = dpr || Math.min(window.devicePixelRatio || 1, 2);
+  function renderFormThumb(canvas, idx, W, H) {
+    W = W || 46; H = H || 44;
+    const d = dpr || Math.min(window.devicePixelRatio || 1, 2);
     canvas.width = W * d; canvas.height = H * d;
     canvas.style.width = W + "px"; canvas.style.height = H + "px";
     const c2 = canvas.getContext("2d");
     c2.setTransform(d, 0, 0, d, 0, 0);
+    c2.clearRect(0, 0, W, H);
     const evo = EVOLUTIONS[idx];
     const theme = { fg: "#1A1A1A", ink: "#1A1A1A", hot: C_ACCENT, accent: C_ACCENT, eye: "#fff", bg: "#fff", mid: "#B8B5AD", line: "#B8B5AD", secondary: "#B8B5AD" };
     const boxW = W * 0.82, boxH = boxW * 100 / 96;
@@ -1347,7 +1352,6 @@
       ctx.textAlign = "left"; ctx.globalAlpha = 1;
     }
 
-    if (state === "clear" && revealStage != null) drawFormShowcase(c, revealStage);
     drawConfetti(c);
     drawTeachPrompt(c);
 
@@ -1394,10 +1398,25 @@
     ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
   }
 
-  function loop() {
-    if (state === "play") update();
-    else if (state === "dying") tickDying();
-    tickConfetti();   // animates over the clear overlay (state !== play)
+  // Fixed-timestep loop: the simulation always advances at 60 steps/sec no
+  // matter the display refresh rate, so 90/120Hz phones don't run the game at
+  // 1.5–2× speed. render() still runs once per animation frame for smoothness.
+  const FRAME_MS = 1000 / 60;
+  let lastFrameT = 0, simAcc = 0;
+  function loop(t) {
+    t = t || 0;
+    if (!lastFrameT) lastFrameT = t;
+    let dt = t - lastFrameT;
+    lastFrameT = t;
+    if (!(dt >= 0) || dt > 250) dt = FRAME_MS;   // clamp NaN / long tab-away pauses
+    simAcc += dt;
+    let steps = 0;
+    while (simAcc >= FRAME_MS && steps < 5) {     // catch up, but never spiral
+      if (state === "play") update();
+      else if (state === "dying") tickDying();
+      tickConfetti();   // animates over the clear overlay (state !== play)
+      simAcc -= FRAME_MS; steps++;
+    }
     render();
     requestAnimationFrame(loop);
   }
@@ -1563,7 +1582,7 @@
   resize();
   refreshHi();
   render();
-  loop();
+  requestAnimationFrame(loop);
 
   // Read-only test hook for automated playtesting. Inert unless the page is
   // opened with ?bot in the query string — adds nothing to normal play.
