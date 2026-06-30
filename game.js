@@ -791,7 +791,7 @@
   // The 96×100 form box anchored to the dino: body-left at dino.x, feet at dino.y.
   // DINO_DRAW is a VISUAL-only enlargement (the hitbox in update() is unchanged),
   // so the dino reads bigger on small screens without making the game harder.
-  const DINO_DRAW = 1.16;
+  const DINO_DRAW = 1.3;
   function formBox() {
     const unit = PXU * formScale() * DINO_DRAW;
     const boxW = 96 * unit, boxH = 100 * unit;
@@ -1110,24 +1110,66 @@
     }
   }
 
-  // Parallax rolling hills to give the scene depth (fills the empty middle).
-  // Two soft bands of domes drifting slower than the foreground.
+  // Parallax background that EVOLVES with the dino (terrainTier 0..4): the world
+  // grows upward — plains → hills → mountains → towering peaks → the sky itself —
+  // so each stage feels like ascending. Drawn in the muted secondary colour
+  // (day/night aware), behind the action, with ambient life (embers / stars).
   function drawHills(c) {
-    const bands = [
-      { base: GROUND + 10, r: 86, gap: 300, par: 0.18, a: 0.16 },
-      { base: GROUND + 20, r: 58, gap: 200, par: 0.34, a: 0.26 },
-    ];
+    const tier = terrainTier();
     ctx.fillStyle = c.secondary;
-    for (const band of bands) {
-      ctx.globalAlpha = band.a;
-      const off = ((dist * band.par) % band.gap + band.gap) % band.gap;
-      for (let x = -off; x < BASE_W + band.gap; x += band.gap) {
-        ctx.beginPath();
-        ctx.arc(x + band.gap / 2, band.base, band.r, Math.PI, 2 * Math.PI);
-        ctx.fill();
-      }
+    const band = (gap, par, a, drawOne) => {
+      ctx.globalAlpha = a;
+      const off = ((dist * par) % gap + gap) % gap;
+      for (let x = -off; x < BASE_W + gap; x += gap) drawOne(x + gap / 2);
+    };
+    const dome = (base, r) => cx => { ctx.beginPath(); ctx.arc(cx, base, r, Math.PI, 2 * Math.PI); ctx.fill(); };
+    const peak = (base, h, halfW) => cx => { ctx.beginPath(); ctx.moveTo(cx - halfW, base); ctx.lineTo(cx, base - h); ctx.lineTo(cx + halfW, base); ctx.closePath(); ctx.fill(); };
+    const isle = (base, w, h) => cx => { rrect(cx - w / 2, base - h, w, h, h * 0.5); };
+    if (tier === 0) {                                   // plains — humble start
+      band(300, 0.18, 0.16, dome(GROUND + 10, 86));
+      band(200, 0.34, 0.26, dome(GROUND + 20, 58));
+    } else if (tier === 1) {                            // rolling hills
+      band(360, 0.16, 0.15, dome(GROUND + 26, 128));
+      band(230, 0.32, 0.24, dome(GROUND + 28, 84));
+    } else if (tier === 2) {                            // mountains rising
+      band(320, 0.15, 0.15, peak(GROUND + 8, 168, 140));
+      band(200, 0.33, 0.24, peak(GROUND + 12, 104, 88));
+    } else if (tier === 3) {                            // towering volcanic peaks
+      band(340, 0.14, 0.17, peak(GROUND + 8, 232, 128));
+      band(210, 0.31, 0.25, peak(GROUND + 12, 150, 82));
+      drawEmbers(c);
+    } else {                                            // the heavens — ascended
+      band(380, 0.13, 0.13, peak(GROUND + 24, 96, 160));  // a distant cloud-sea of summits
+      band(320, 0.22, 0.16, isle(GROUND - 150, 130, 26));  // floating islands
+      band(240, 0.30, 0.13, isle(GROUND - 270, 86, 18));
+      drawStars(c);
     }
     ctx.globalAlpha = 1;
+  }
+  // Volcanic embers drifting up (tier 3) — a few deterministic accent motes.
+  function drawEmbers(c) {
+    ctx.fillStyle = c.accent;
+    for (let i = 0; i < 10; i++) {
+      const span = BASE_W + 40;
+      const x = ((i * 167 - dist * 0.6) % span + span) % span - 20;
+      const climb = (i * 53 + dist * 0.7) % 230;
+      const y = GROUND - climb;
+      const a = 0.4 * (1 - climb / 230) * (0.6 + 0.4 * Math.sin(uiTick * 0.2 + i));
+      ctx.globalAlpha = Math.max(0, a);
+      ctx.beginPath(); ctx.arc(x, y, 2.2, 0, Math.PI * 2); ctx.fill();
+    }
+  }
+  // Twinkling stars in the upper sky (tier 4), a few as accent sparkles.
+  function drawStars(c) {
+    const span = BASE_W + 30, hi = Math.max(60, GROUND - 240);
+    for (let i = 0; i < 16; i++) {
+      const x = ((i * 91 - dist * 0.08) % span + span) % span - 15;
+      const y = 28 + (i * 137) % hi;
+      const tw = 0.35 + 0.45 * Math.sin(uiTick * 0.12 + i * 1.3);
+      ctx.globalAlpha = Math.max(0.05, tw);
+      if (i % 4 === 0) { ctx.fillStyle = c.accent; drawSparkle(x, y, 3.4, uiTick * 0.02 + i); }
+      else { ctx.fillStyle = c.secondary; ctx.beginPath(); ctx.arc(x, y, 1.8, 0, Math.PI * 2); ctx.fill(); }
+    }
   }
 
   function drawObstacle(o, c) {

@@ -141,7 +141,7 @@ body {
    that the ground sits in the lower third (not a high mid-line) with plenty of
    sky for jumps, but framed so the action isn't a tiny strip lost in an empty
    canvas. Overlays (inset:0) still cover the whole stage. */
-#game { display: block; width: 100%; aspect-ratio: 1 / 1; max-height: 100%; }
+#game { display: block; width: 100%; aspect-ratio: 3 / 4; max-height: 100%; }
 
 .overlay {
   position: absolute;

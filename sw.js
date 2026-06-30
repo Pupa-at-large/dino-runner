@@ -2,7 +2,7 @@
    Network-first for the app shell so deploys show up immediately when online;
    falls back to the cache offline. (The old cache-first strategy pinned clients
    to the first version they ever loaded — that's why updates didn't appear.) */
-const CACHE = "dino-runner-v3";
+const CACHE = "dino-runner-v4";
 const SHELL = [
   "./",
   "index.html",
