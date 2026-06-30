@@ -252,6 +252,7 @@
 
   // ---- Persistence ----
   let unlocked = 1, bestByLevel = {}, chosenSkin = null, tutorialSeen = false, championUnlocked = false; // chosenSkin null = always newest
+  let tipsSeen = new Set();   // one-time "first-encounter" lessons already shown
   try {
     unlocked = parseInt(localStorage.getItem("dino_unlocked") || "1", 10) || 1;
     bestByLevel = JSON.parse(localStorage.getItem("dino_best") || "{}") || {};
@@ -259,6 +260,8 @@
     if (sk != null && sk !== "auto") chosenSkin = parseInt(sk, 10);
     tutorialSeen = localStorage.getItem("dino_seen") === "1";
     championUnlocked = localStorage.getItem("dino_champion") === "1";
+    const tips = localStorage.getItem("dino_tips");
+    if (tips) tipsSeen = new Set(tips.split(",").filter(Boolean));
   } catch (e) {}
   function saveProgress() {
     try {
@@ -266,8 +269,10 @@
       localStorage.setItem("dino_best", JSON.stringify(bestByLevel));
       localStorage.setItem("dino_skin", chosenSkin == null ? "auto" : String(chosenSkin));
       localStorage.setItem("dino_champion", championUnlocked ? "1" : "0");
+      localStorage.setItem("dino_tips", Array.from(tipsSeen).join(","));
     } catch (e) {}
   }
+  function markTip(key) { tipsSeen.add(key); saveProgress(); }
 
   // ---- Sound ----
   let audioCtx = null, soundOn = true;
@@ -383,7 +388,12 @@
     if (cn && !reduceMotion)
       for (let i = 0; i < 7; i++)
         particles.push({ kind: "dot", x: cn.x, y: cn.y, vx: (Math.random() - 0.5) * 4, vy: -1 - Math.random() * 3, r: 3, life: 18, max: 18 });
-    if (!powered) { powered = true; toastText = "\u2726 \u53d8\u5927\u4e86 BIG"; toastT = 72; pulseT = reduceMotion ? 0 : 18; }
+    if (!powered) {
+      powered = true;
+      pulseT = reduceMotion ? 0 : 18;
+      if (!tipsSeen.has("coin")) { toastText = "\u2726 \u91d1\u5e01 \u00b7 \u53d8\u5927,\u53ef\u6321\u4e00\u6b21\u649e\u51fb"; toastT = 150; markTip("coin"); }
+      else { toastText = "\u2726 \u53d8\u5927\u4e86 BIG"; toastT = 72; }
+    }
   }
   // A lethal touch: if big, shrink + plow through + brief mercy (survives);
   // if already mid-mercy, ignore; otherwise it's a real crash. Returns true on death.
@@ -394,6 +404,7 @@
       if (o) o.smashed = true;
       flashT = reduceMotion ? 0 : 6;
       blip(200, 0.14, "square");
+      if (!tipsSeen.has("shield")) { toastText = "护盾抵挡!变回原形"; toastT = 130; markTip("shield"); }
       if (!reduceMotion)
         for (let i = 0; i < 8; i++)
           particles.push({ kind: "dust", x: dino.x + dino.w / 2, y: dino.y - dino.h / 2, r: 3 + Math.random() * 3, vr: 0, vx: (Math.random() - 0.5) * 5, vy: -1 - Math.random() * 3, life: 22, max: 22 });
@@ -468,7 +479,7 @@
     if (state === "ready" || state === "over") { startLevel(level); return; }
     if (state === "paused") { resumeGame(); return; }
     if (state !== "play") return; // howto / clear / select / skins / settings
-    if (teach) { teachInput("tap"); return; }
+    if (teach) { if (isTipLesson(teach)) dismissTip(); else teachInput("tap"); return; }
     if (dino.onGround) {
       dino.vy = JUMP_V; dino.onGround = false; dino.jumps = 1; dino.ducking = false;
       if (tutorialMode) taught.jump = true;        // self-taught before the freeze
@@ -481,9 +492,11 @@
   }
   function releaseJump() { /* no-op: height now comes from the double jump */ }
   function setDuck(v) {
-    if (teach) { if (v) teachInput("duck"); return; }
+    if (teach) { if (v) { if (isTipLesson(teach)) dismissTip(); else teachInput("duck"); } return; }
     if (state === "play" && dino.onGround) { dino.ducking = v; if (v && tutorialMode) taught.duck = true; }
   }
+  // Dismiss a first-encounter tip (any tap/key) — mark it seen and resume play.
+  function dismissTip() { if (teach) { markTip(teach); teach = null; blip(620, 0.06); } }
 
   // ---- Spawning ----
   // Pull scheduled obstacles onto the stage as their world position reaches the
@@ -533,6 +546,24 @@
     return taught[move] ? null : move;
   }
 
+  // First-encounter tips (any level, once ever): if the NEAREST oncoming thing
+  // is a new mechanic the player hasn't been shown yet, freeze and explain it.
+  function isTipLesson(t) { return t === "gap" || t === "wall" || t === "bar"; }
+  function pendingTip() {
+    let nearX = Infinity, key = null;
+    for (const o of obstacles) {
+      if (o.type === "finish" || o.x + o.w <= dino.x) continue;
+      if (o.x < nearX) { nearX = o.x; key = o.type === "wall" ? "wall" : o.type === "bar" ? "bar" : null; }
+    }
+    for (const g of gaps) {
+      if (g.x + g.w <= dino.x) continue;
+      if (g.x < nearX) { nearX = g.x; key = "gap"; }
+    }
+    if (!key || tipsSeen.has(key) || !dino.onGround) return null;
+    const d = nearX - dino.x;
+    return (d > 40 && d <= 220) ? key : null;
+  }
+
   // Is there solid ground at this screen-x? (false inside a pit)
   function groundUnder(px) {
     for (const g of gaps) if (px > g.x + 4 && px < g.x + g.w - 4) return false;
@@ -541,8 +572,13 @@
 
   // ---- Update ----
   function update() {
-    // Learn-by-doing: freeze the world at the moment a new move is needed.
-    if (tutorialMode && !teach) { const m = pendingLesson(); if (m) { teach = m; teachTaps = 0; } }
+    // Learn-by-doing: freeze the world at the moment a new move is needed, and
+    // (any level) the first time a new mechanic — gap / wall / bar — appears.
+    if (!teach) {
+      let m = tutorialMode ? pendingLesson() : null;
+      if (!m) m = pendingTip();
+      if (m) { teach = m; teachTaps = 0; }
+    }
     if (teach) {
       dino.vy = Math.min(dino.vy + GRAV, MAX_FALL); // only the dino animates while frozen
       dino.y += dino.vy;
@@ -1321,8 +1357,19 @@
   // Learn-by-doing prompt: a minimal animated gesture above the dino, shown
   // only while the world is frozen waiting for that move (DESIGN_SPEC-style,
   // no wall of text — like Subway Surfers / Temple Run).
+  // Lesson copy: [title, control hint]. Controls spell out BOTH touch and
+  // keyboard so first-time players know either input works.
+  const LESSON = {
+    jump:   ["跳 JUMP", "点击屏幕 / 空格 / ↑"],
+    double: ["二段跳 DOUBLE", "空中再点一次 / 再按空格"],
+    duck:   ["下蹲 DUCK", "向下滑 / ↓ 键"],
+    gap:    ["缺口 · 跳过去!", "点击 / 空格 — 掉下去会摔"],
+    wall:   ["高墙 · 跳上去", "点击 / 空格,落到墙顶"],
+    bar:    ["低梁 · 蹲下钻过", "向下滑 / ↓ — 跳起会撞到"],
+  };
   function drawTeachPrompt(c) {
     if (!teach) return;
+    const down = teach === "duck" || teach === "bar";
     const cx = dino.x + dino.w / 2, cy = dino.y - dino.h - 64;
     const pulse = 1 + 0.10 * Math.sin(uiTick * 0.2);
     const bob = Math.sin(uiTick * 0.2) * 4;
@@ -1331,14 +1378,19 @@
     ctx.globalAlpha = 0.15; ctx.fillStyle = c.accent;
     ctx.beginPath(); ctx.arc(0, 4, 36, 0, Math.PI * 2); ctx.fill();
     ctx.globalAlpha = 1; ctx.fillStyle = c.accent;
-    if (teach === "duck") triBox(-13, -6 - bob, 26, 15, [[0, 0], [1, 0], [0.5, 1]]);
+    if (down) triBox(-13, -6 - bob, 26, 15, [[0, 0], [1, 0], [0.5, 1]]);
     else { triBox(-13, -2 + bob, 26, 15, [[0.5, 0], [1, 1], [0, 1]]); if (teach === "double") triBox(-13, -18 + bob, 26, 15, [[0.5, 0], [1, 1], [0, 1]]); }
     ctx.restore();
-    const word = teach === "duck" ? "蹲 / ↓" : teach === "double" ? (teachTaps >= 1 ? "再来一下!" : "连点两下") : "跳 / TAP";
-    ctx.fillStyle = c.accent;
-    ctx.font = "700 22px 'Space Grotesk', sans-serif";
+    const L = LESSON[teach] || ["", ""];
+    const title = teach === "double" && teachTaps >= 1 ? "再来一下!" : L[0];
+    const midX = BASE_W / 2, ty = cy + 24;       // centred so long labels never clip
     ctx.textAlign = "center"; ctx.textBaseline = "middle";
-    ctx.fillText(word, cx, cy + 30);
+    ctx.fillStyle = c.accent;
+    ctx.font = "700 23px 'Space Grotesk', sans-serif";
+    ctx.fillText(title, midX, ty);
+    ctx.fillStyle = c.ink;
+    ctx.font = "600 14px 'Space Grotesk', sans-serif";
+    ctx.fillText(L[1], midX, ty + 24);
     ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
   }
 
@@ -1397,15 +1449,16 @@
   }
 
   // ---- Events ----
-  function isJumpKey(e) { return e.code === "Space" || e.code === "ArrowUp"; }
+  function isJumpKey(e) { return e.code === "Space" || e.code === "ArrowUp" || e.code === "KeyW" || e.code === "KeyA"; }
+  function isDuckKey(e) { return e.code === "ArrowDown" || e.code === "KeyS"; }
   window.addEventListener("keydown", e => {
     if (isJumpKey(e)) { e.preventDefault(); jump(); }
-    else if (e.code === "ArrowDown") { e.preventDefault(); setDuck(true); }
+    else if (isDuckKey(e)) { e.preventDefault(); setDuck(true); }
     else if (e.code === "Escape" || e.code === "KeyP") { if (state === "play") pauseGame(); else if (state === "paused") resumeGame(); }
   }, { passive: false });
   window.addEventListener("keyup", e => {
     if (isJumpKey(e)) releaseJump();
-    else if (e.code === "ArrowDown") setDuck(false);
+    else if (isDuckKey(e)) setDuck(false);
   });
 
   // Whole-screen input (DESIGN_SPEC §6): tap = jump, swipe-down / long-press =
@@ -1488,7 +1541,7 @@
     refreshSettings();
   });
   document.getElementById("setResetBtn").addEventListener("click", () => {
-    unlocked = 1; bestByLevel = {}; chosenSkin = null; championUnlocked = false; saveProgress();
+    unlocked = 1; bestByLevel = {}; chosenSkin = null; championUnlocked = false; tipsSeen.clear(); saveProgress();
     try { localStorage.removeItem("dino_motion"); } catch (e) {}
     refreshSkinUI(); blip(330, 0.12, "sawtooth");
     goHome();
@@ -1520,6 +1573,7 @@
       get dino() { return dino; }, get obstacles() { return obstacles; },
       get gaps() { return gaps; }, get coins() { return coins; },
       get powered() { return powered; }, get mercy() { return mercyT; },
+      get teach() { return teach; },
       get speed() { return speed; }, get ground() { return GROUND; },
       get goal() { return goal; }, get dist() { return dist; },
       jump, releaseJump, setDuck, next: () => nextBtn.click(),
