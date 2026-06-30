@@ -3,7 +3,8 @@
 
   // ---- DOM ----
   const cv = document.getElementById("game");
-  const ctx = cv.getContext("2d");
+  let ctx = cv.getContext("2d");   // reassignable so form thumbnails can draw into their own canvas
+  const mainCtx = ctx;
   const stage = document.getElementById("stage");
   const scoreEl = document.getElementById("score");
   const levelEl = document.getElementById("level");
@@ -919,6 +920,25 @@
     dinoBase(c, B, !!o.accentEye);
     drawDinoOrnaments(c, B, o);
   }
+  // Render a form's ACTUAL drawn art into a small canvas, so the Forms picker
+  // shows the real character (not an Apple emoji). Temporarily swaps the global
+  // ctx to the thumbnail's context and forces a clean standing pose.
+  function renderFormThumb(canvas, idx) {
+    const W = 46, H = 44, d = dpr || Math.min(window.devicePixelRatio || 1, 2);
+    canvas.width = W * d; canvas.height = H * d;
+    canvas.style.width = W + "px"; canvas.style.height = H + "px";
+    const c2 = canvas.getContext("2d");
+    c2.setTransform(d, 0, 0, d, 0, 0);
+    const evo = EVOLUTIONS[idx];
+    const theme = { fg: "#1A1A1A", ink: "#1A1A1A", hot: C_ACCENT, accent: C_ACCENT, eye: "#fff", bg: "#fff", mid: "#B8B5AD", line: "#B8B5AD", secondary: "#B8B5AD" };
+    const boxW = W * 0.82, boxH = boxW * 100 / 96;
+    const B = { unit: boxW / 96, boxW, boxH, boxLeft: (W - boxW) / 2, boxTop: H - 0.86 * boxH };
+    const savedOn = dino.onGround, savedLeg = legTick, savedCrash = dino.crashed;
+    dino.onGround = true; legTick = 0; dino.crashed = false;
+    const prev = ctx; ctx = c2;
+    try { drawFormAt(theme, evo, B); } finally { ctx = prev; }
+    dino.onGround = savedOn; legTick = savedLeg; dino.crashed = savedCrash;
+  }
   function drawDino(baseC) {
     const evo = EVOLUTIONS[effectiveStage()];
     const crash = dino.crashed;
@@ -1311,10 +1331,21 @@
       const locked = i > max;
       const cell = document.createElement("button");
       cell.className = "skin-cell" + (locked ? " locked" : "") + (!locked && i === active ? " active" : "");
-      const glyph = locked ? "🔒" : evo.emoji;
-      const lockLabel = evo.ultimate ? "通关 L30" : "Level " + evo.from;
-      cell.innerHTML = '<span class="skin-emoji">' + glyph + '</span>' +
-        '<span class="skin-name">' + (locked ? lockLabel : evo.name) + '</span>';
+      if (locked) {
+        const g = document.createElement("span");
+        g.className = "skin-emoji"; g.textContent = "🔒";
+        cell.appendChild(g);
+      } else {
+        // The real in-game character art (not an Apple emoji).
+        const thumb = document.createElement("canvas");
+        thumb.className = "skin-thumb";
+        renderFormThumb(thumb, i);
+        cell.appendChild(thumb);
+      }
+      const name = document.createElement("span");
+      name.className = "skin-name";
+      name.textContent = locked ? (evo.ultimate ? "通关 L30" : "Level " + evo.from) : evo.name;
+      cell.appendChild(name);
       if (!locked) cell.addEventListener("click", () => {
         chosenSkin = (i === max) ? null : i; // picking the newest returns to auto
         saveProgress(); refreshSkinUI(); buildSkinGrid(); blip(560, 0.06);

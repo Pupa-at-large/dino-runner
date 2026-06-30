@@ -360,7 +360,8 @@ body {
 .skin-cell:active { transform: scale(0.96); }
 .skin-cell.active { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, var(--surface)); }
 .skin-cell.locked { opacity: 0.5; cursor: not-allowed; }
-.skin-emoji { font-size: 22px; line-height: 1; }
+.skin-emoji { font-size: 22px; line-height: 1; width: 46px; text-align: center; flex: none; }
+.skin-thumb { width: 46px; height: 44px; flex: none; }
 .skin-name { font-size: 12px; font-weight: 600; }
 .skin-cell.locked .skin-name { color: var(--mid); }
 
