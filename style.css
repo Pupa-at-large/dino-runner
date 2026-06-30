@@ -137,10 +137,11 @@ body {
   transition: background 0.4s ease, border-color 0.4s ease;
 }
 
-/* The runner is a horizontal band: cap it to a landscape ratio and centre it
-   so on tall phones the action isn't a tiny strip at the bottom of a huge
-   empty canvas. Overlays (inset:0) still cover the whole stage. */
-#game { display: block; width: 100%; aspect-ratio: 16 / 10; max-height: 100%; }
+/* The runner is a capped, near-square band centred in the stage: tall enough
+   that the ground sits in the lower third (not a high mid-line) with plenty of
+   sky for jumps, but framed so the action isn't a tiny strip lost in an empty
+   canvas. Overlays (inset:0) still cover the whole stage. */
+#game { display: block; width: 100%; aspect-ratio: 1 / 1; max-height: 100%; }
 
 .overlay {
   position: absolute;
@@ -431,7 +432,7 @@ body {
 .title-rule { display: block; width: 66px; height: 6px; border-radius: 3px; background: var(--accent); }
 .hi-score { position: absolute; top: 14px; right: 16px; font-family: var(--font-mono); font-size: 12px; letter-spacing: 1px; color: var(--muted); }
 .cta-big { font-size: 16px; padding: 15px 32px; }
-.pause-glyph { letter-spacing: 6px; }
+.pause-glyph { letter-spacing: 6px; cursor: pointer; }
 .over-kicker { color: var(--accent); }
 
 /* ---- How-to-play tutorial ---- */

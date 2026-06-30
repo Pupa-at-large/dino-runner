@@ -334,6 +334,7 @@
     if (audioCtx && audioCtx.state === "suspended") audioCtx.resume();
     loadLevel(n);
     state = "play";
+    pauseBtn.textContent = "❚❚";
     hideAllOverlays();
     blip(440, 0.08);
   }
@@ -436,12 +437,14 @@
   function pauseGame() {
     if (state !== "play") return;
     state = "paused";
+    pauseBtn.textContent = "▶";          // now tapping it resumes
     pauseStats.textContent = "Score " + String(Math.floor(score)).padStart(5, "0");
     showOverlay(pauseOverlay);
   }
   function resumeGame() {
     if (state !== "paused") return;
     state = "play";
+    pauseBtn.textContent = "❚❚";         // back to a pause control
     hideAllOverlays();
   }
   function goHome() { loadLevel(level); showTitle(); }
@@ -785,8 +788,11 @@
   function formScale() { return EVOLUTIONS[effectiveStage()].scale * (powered ? POWER_SCALE : 1); }
 
   // The 96×100 form box anchored to the dino: body-left at dino.x, feet at dino.y.
+  // DINO_DRAW is a VISUAL-only enlargement (the hitbox in update() is unchanged),
+  // so the dino reads bigger on small screens without making the game harder.
+  const DINO_DRAW = 1.16;
   function formBox() {
-    const unit = PXU * formScale();
+    const unit = PXU * formScale() * DINO_DRAW;
     const boxW = 96 * unit, boxH = 100 * unit;
     return { unit, boxW, boxH, boxLeft: dino.x - (20 / 96) * boxW, boxTop: dino.y - (91 / 100) * boxH };
   }
@@ -1385,6 +1391,7 @@
   // ---- Pause + Settings ----
   pauseBtn.addEventListener("click", () => { if (state === "play") pauseGame(); else if (state === "paused") resumeGame(); });
   document.getElementById("resumeBtn").addEventListener("click", resumeGame);
+  document.getElementById("pauseGlyph").addEventListener("click", resumeGame);
   document.getElementById("pauseRestartBtn").addEventListener("click", () => startLevel(level));
   document.getElementById("pauseLevelsBtn").addEventListener("click", showSelect);
   document.getElementById("pauseHomeBtn").addEventListener("click", goHome);
