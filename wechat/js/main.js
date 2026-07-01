@@ -19,7 +19,10 @@ let ctx = canvas.getContext('2d');   // reassignable (kept for parity; unused he
 
 // Screen metrics. We draw in logical CSS px (windowWidth × windowHeight) and
 // scale the backing store by pixelRatio, mirroring the web resize() approach.
-const info = wx.getSystemInfoSync();
+// Prefer the current wx.getWindowInfo(); fall back to the deprecated
+// wx.getSystemInfoSync() on older bases (both expose windowWidth/Height/pixelRatio).
+function winInfo() { return (wx.getWindowInfo ? wx.getWindowInfo() : wx.getSystemInfoSync()); }
+const info = winInfo();
 let BASE_W = info.windowWidth;
 let BASE_H = info.windowHeight;
 let dpr = info.pixelRatio || 1;
@@ -36,7 +39,7 @@ function applyCanvasSize() {
 }
 // Single resize (orientation locked to portrait). Recompute GROUND from height.
 function resize() {
-  const i = wx.getSystemInfoSync();
+  const i = winInfo();
   BASE_W = i.windowWidth; BASE_H = i.windowHeight; dpr = i.pixelRatio || 1;
   GROUND = Math.round(BASE_H * 0.72);
   applyCanvasSize();
