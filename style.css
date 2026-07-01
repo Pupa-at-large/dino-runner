@@ -1,20 +1,65 @@
+/* ---- Self-hosted fonts (offline-safe; OFL licensed) ---- */
+/* Space Grotesk ships as a variable font, so one file covers 400–700. */
+@font-face {
+  font-family: "Space Grotesk";
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url("fonts/space-grotesk.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Space Mono";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("fonts/space-mono-400.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Space Mono";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("fonts/space-mono-700.woff2") format("woff2");
+}
+
+/* ---- Color tokens (DESIGN_SPEC §1) ----
+   Only --bg and --ink flip between day/night; --accent is constant. */
 :root {
-  --bg: #f7f6f1;
-  --fg: #2c2c2a;
-  --mid: #888780;
-  --line: #d3d1c7;
-  --accent: #534ab7;
-  --surface: #ffffff;
+  --bg: #F4F3F0;          /* sky / background */
+  --ink: #1A1A1A;         /* body / characters / text */
+  --secondary: #B8B5AD;   /* clouds, ghosts, disabled */
+  --accent: #E8552D;      /* constant — danger, score, CTAs */
+  --accent-shadow: #B53C1A; /* 3D button lip */
+
+  /* supporting neutrals (light) */
+  --card: #FFFFFF;
+  --hairline: #ECECEA;
+  --panel: #FAF9F7;
+  --muted: #9A988F;
+  --body-text: #55534D;
+
+  /* legacy aliases kept so older rules still resolve */
+  --fg: var(--ink);
+  --mid: var(--muted);
+  --line: var(--hairline);
+  --surface: var(--card);
+
+  --font-ui: "Space Grotesk", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "Space Mono", "SF Mono", ui-monospace, Menlo, Consolas, monospace;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #1f1f1d;
-    --fg: #f1efe8;
-    --mid: #888780;
-    --line: #444441;
-    --accent: #afa9ec;
-    --surface: #2c2c2a;
+    --bg: #16161A;
+    --ink: #F1EFE9;
+    --secondary: #4A4A52;
+    --accent: #E8552D;
+    --accent-shadow: #8F2F12;
+    --card: #222228;
+    --hairline: #2C2C32;
+    --panel: #1C1C20;
+    --muted: #8C8A93;
+    --body-text: #BDBBB4;
   }
 }
 
@@ -32,9 +77,9 @@ html, body {
 }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-family: var(--font-ui);
   background: var(--bg);
-  color: var(--fg);
+  color: var(--ink);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -57,13 +102,13 @@ body {
   align-items: center;
   justify-content: space-between;
   padding-top: 14px;
-  font-family: "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
 }
 
 .hud-item { display: flex; flex-direction: column; gap: 2px; }
 .hud-item:last-child { align-items: flex-end; }
-.hud-label { font-size: 11px; letter-spacing: 1px; color: var(--mid); }
-.hud-value { font-size: 18px; font-weight: 600; color: var(--fg); font-variant-numeric: tabular-nums; }
+.hud-label { font-size: 11px; letter-spacing: 2px; color: var(--muted); }
+.hud-value { font-size: 22px; font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums; }
 
 .icon-btn {
   width: 40px; height: 40px;
@@ -82,6 +127,9 @@ body {
   position: relative;
   flex: 1;
   min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   border-radius: 16px;
   overflow: hidden;
   border: 1px solid var(--line);
@@ -89,7 +137,11 @@ body {
   transition: background 0.4s ease, border-color 0.4s ease;
 }
 
-#game { display: block; width: 100%; height: 100%; }
+/* The runner is a capped, near-square band centred in the stage: tall enough
+   that the ground sits in the lower third (not a high mid-line) with plenty of
+   sky for jumps, but framed so the action isn't a tiny strip lost in an empty
+   canvas. Overlays (inset:0) still cover the whole stage. */
+#game { display: block; width: 100%; aspect-ratio: 3 / 4; max-height: 100%; }
 
 .overlay {
   position: absolute;
@@ -106,9 +158,9 @@ body {
   transition: opacity 0.25s ease;
 }
 .overlay.hidden { opacity: 0; pointer-events: none; }
-.overlay-title { font-size: 28px; font-weight: 700; letter-spacing: -0.5px; }
-.overlay-sub { font-size: 15px; color: var(--fg); }
-.overlay-hint { font-size: 12px; color: var(--mid); margin-top: 4px; }
+.overlay-title { font-family: var(--font-ui); font-size: 30px; font-weight: 700; letter-spacing: -0.9px; }
+.overlay-sub { font-size: 15px; color: var(--body-text); }
+.overlay-hint { font-family: var(--font-mono); font-size: 11px; letter-spacing: 1.2px; color: var(--muted); margin-top: 4px; }
 
 .controls {
   display: flex;
@@ -197,26 +249,33 @@ body {
 /* ---- Pill buttons in overlays ---- */
 .pill-btn {
   margin-top: 14px;
-  padding: 10px 22px;
-  border: 1px solid var(--line);
+  padding: 11px 24px;
+  border: 2px solid var(--ink);
   border-radius: 999px;
-  background: var(--surface);
-  color: var(--fg);
+  background: transparent;
+  color: var(--ink);
+  font-family: var(--font-ui);
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
   transition: transform 0.05s ease, background 0.15s ease;
 }
 .pill-btn:active { transform: scale(0.97); }
+/* Primary CTA — accent fill with a 3D "lip" (DESIGN_SPEC §9) */
 .pill-btn.primary {
+  border: none;
+  border-radius: 28px;
   background: var(--accent);
-  border-color: var(--accent);
   color: #fff;
+  font-weight: 700;
+  box-shadow: 0 4px 0 var(--accent-shadow);
 }
+.pill-btn.primary:active { transform: translateY(4px); box-shadow: 0 0 0 var(--accent-shadow); }
 
 .clear-kicker {
-  font-size: 12px;
-  letter-spacing: 2px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 2.5px;
   text-transform: uppercase;
   color: var(--accent);
   font-weight: 700;
@@ -254,4 +313,161 @@ body {
 .level-cell.cleared {
   border-color: var(--accent);
   color: var(--accent);
+}
+
+/* 50 levels — let the grid scroll inside the overlay */
+.level-grid {
+  max-height: 52vh;
+  overflow-y: auto;
+  padding: 2px;
+  scrollbar-width: thin;
+}
+
+/* ---- Overlay action row ---- */
+.overlay-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+/* ---- Skin / evolution grid ---- */
+.skin-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+  margin-top: 14px;
+  width: 100%;
+  max-width: 320px;
+  max-height: 52vh;
+  overflow-y: auto;
+  padding: 2px;
+  scrollbar-width: thin;
+}
+.skin-cell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--fg);
+  cursor: pointer;
+  text-align: left;
+  transition: transform 0.05s ease, background 0.15s ease, border-color 0.15s ease;
+}
+.skin-cell:active { transform: scale(0.96); }
+.skin-cell.active { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, var(--surface)); }
+.skin-cell.locked { opacity: 0.5; cursor: not-allowed; }
+.skin-emoji { font-size: 22px; line-height: 1; width: 46px; text-align: center; flex: none; }
+.skin-thumb { width: 46px; height: 44px; flex: none; }
+.skin-name { font-size: 12px; font-weight: 600; }
+.skin-cell.locked .skin-name { color: var(--mid); }
+
+/* ---- Keyboard focus visibility (a11y) ---- */
+.pill-btn:focus-visible,
+.text-btn:focus-visible,
+.icon-btn:focus-visible,
+.ctrl-btn:focus-visible,
+.level-cell:focus-visible,
+.skin-cell:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ---- HUD icon cluster ---- */
+.hud-icons { display: flex; gap: 8px; align-items: center; }
+.icon-btn { font-family: var(--font-mono); }
+
+/* ---- Settings panel ---- */
+.settings-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  max-width: 300px;
+  margin-top: 16px;
+}
+.setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border: 1px solid var(--hairline);
+  border-radius: 12px;
+  background: var(--card);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.05s ease, background 0.15s ease;
+}
+.setting-row:active { transform: scale(0.98); }
+.setting-val { font-family: var(--font-mono); font-weight: 700; color: var(--accent); }
+.setting-row.danger { color: var(--accent); }
+
+/* ---- Title / home screen (DESIGN_SPEC §5.1) ---- */
+.title-screen {
+  justify-content: flex-start;
+  padding-top: 9%;
+  gap: 16px;
+  /* fade out toward the bottom so the dino + cactus scene shows on the ground */
+  background: linear-gradient(to bottom,
+    var(--bg) 0%,
+    color-mix(in srgb, var(--bg) 88%, transparent) 52%,
+    transparent 80%);
+  backdrop-filter: none;
+}
+.title-block { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+.game-title {
+  font-family: var(--font-ui);
+  font-weight: 700;
+  font-size: clamp(42px, 14vw, 66px);
+  line-height: 0.9;
+  letter-spacing: -2.5px;
+  text-align: center;
+  color: var(--ink);
+}
+.title-rule { display: block; width: 66px; height: 6px; border-radius: 3px; background: var(--accent); }
+.hi-score { position: absolute; top: 14px; right: 16px; font-family: var(--font-mono); font-size: 12px; letter-spacing: 1px; color: var(--muted); }
+.cta-big { font-size: 16px; padding: 15px 32px; }
+.pause-glyph { letter-spacing: 6px; cursor: pointer; }
+.over-kicker { color: var(--accent); }
+
+/* ---- How-to-play tutorial ---- */
+.how-list {
+  display: flex; flex-direction: column; gap: 12px;
+  width: 100%; max-width: 340px; margin: 18px 0 8px;
+}
+.how-row {
+  display: flex; align-items: center; gap: 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--hairline); border-radius: 14px;
+  background: var(--card); text-align: left;
+}
+.how-ico { font-size: 26px; line-height: 1; width: 38px; text-align: center; flex: none; }
+.how-txt { display: flex; flex-direction: column; font-size: 12.5px; color: var(--body-text); }
+.how-txt b { font-size: 15px; color: var(--ink); margin-bottom: 2px; }
+.how-note { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.5px; color: var(--muted); margin-top: 4px; }
+
+/* ---- Level-clear celebration ---- */
+#clearOverlay { background: color-mix(in srgb, var(--bg) 52%, transparent); backdrop-filter: none; }
+/* New-form reveal: the real form art renders into #clearForm in the normal
+   overlay flow (between title and subtitle), so nothing overlaps. */
+.clear-form { display: block; width: 132px; height: 124px; margin: 2px auto; }
+.clear-form.hidden { display: none; }
+#clearOverlay.reveal .overlay-title { font-size: 26px; }
+#clearOverlay:not(.hidden) { animation: pop-in 0.42s cubic-bezier(0.2, 1.3, 0.35, 1); }
+@keyframes pop-in {
+  0% { transform: scale(0.9); opacity: 0; }
+  60% { transform: scale(1.03); }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+/* ---- Respect reduced-motion preference ---- */
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; }
+  .progress-fill, .progress-dino { transition: none !important; }
 }

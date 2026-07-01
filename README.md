@@ -1,19 +1,23 @@
 # 🦖 Dino Runner
 
-A minimal endless-runner game in pure HTML, CSS, and JavaScript — no frameworks, no build step, no assets. Inspired by Chrome's offline dinosaur game. Works on mobile and desktop.
+A minimal level-based runner game in pure HTML, CSS, and JavaScript — no frameworks, no build step, no assets, no dependencies. Inspired by Chrome's offline dinosaur game. Works on mobile and desktop, and installs as an offline PWA.
 
 [**▶ Play it live**](#) <!-- replace with your GitHub Pages URL -->
 
 ## Features
 
-- **One-tap to play** — tap, click, space, or ↑ to jump; hold / ↓ to duck
-- **Variable jump height** — hold to jump higher, tap for a short hop
-- **Progressive difficulty** — speed ramps up the longer you survive
-- **Ground + flying obstacles** — cacti to jump, pterodactyls to duck under (after 250 pts)
-- **Day / night cycle** — colors invert at score milestones
-- **Persistent high score** — saved locally in your browser
-- **Sound toggle** — tiny synthesized blips, no audio files
-- **Responsive + crisp** — DPR-aware canvas, fits any screen, respects safe areas and dark mode
+- **Whole-screen controls** — tap to jump, tap again mid-air to double jump, swipe down to duck
+- **Double-jump gate** — small cacti need one jump; tall cacti require the double jump
+- **50 hand-authored levels** — each is a designed obstacle score, not random; spacing auto-scales to each level's speed so every level stays fair
+- **Evolve your dino** — clear levels to unlock 10 flat-geometry forms, from a horned egg to a 巨龙 (the hitbox grows with you); pick any unlocked form in **Forms**
+- **Ground + flying obstacles** — cacti to jump, pterodactyls to duck under (or jump over)
+- **Day / night cycle** — full-screen invert + accent pulse + speed surge at each milestone, with a constant orange danger accent
+- **Design-driven visuals** — built to the Design Cloud spec (`docs/design/DESIGN_SPEC.md`): two-token theme, Space Grotesk / Space Mono type, flat-geometry glyphs
+- **Screens** — title, HUD, level-clear, level-select (50), Forms, Pause, Settings
+- **Persistent progress** — unlocked levels, best score per level, chosen form, preferences saved locally
+- **Installable & offline** — PWA manifest + service worker cache the whole app (fonts included)
+- **Accessible** — `prefers-reduced-motion` (toggleable) and dark mode; keyboard-navigable
+- **Responsive + crisp** — DPR-aware canvas, fits any screen, respects safe areas
 
 ## Run locally
 
@@ -39,17 +43,25 @@ npx serve .
 
 | Action | Desktop | Mobile |
 | --- | --- | --- |
-| Jump | Space / ↑ / click | Tap screen or JUMP |
-| Duck | ↓ (hold) | Hold DUCK |
-| Higher jump | Hold jump | Hold tap |
+| Jump | Space / ↑ / click | Tap anywhere |
+| Double jump | Tap again mid-air | Tap again mid-air |
+| Duck | ↓ (hold) | Swipe down / long-press |
+| Pause | Esc / P | Pause button |
+
+Small cacti need one jump; **tall cacti require a double jump**. Duck (or jump) under pterodactyls.
 
 ## Structure
 
 ```
 dino-runner/
-├── index.html   # markup + HUD
-├── style.css    # mobile-first styles, dark mode
-└── game.js      # game engine (loop, physics, rendering)
+├── index.html     # markup + HUD + overlays
+├── style.css      # mobile-first styles, @font-face, dark mode, reduced-motion
+├── game.js        # game engine (levels, physics, evolution, rendering)
+├── manifest.json  # PWA metadata
+├── sw.js          # service worker (offline app-shell cache)
+├── icon.svg       # app icon
+├── fonts/         # self-hosted Space Grotesk + Space Mono (woff2)
+└── docs/design/   # Design Cloud visual spec (DESIGN_SPEC.md)
 ```
 
 ## License

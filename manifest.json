@@ -1,0 +1,19 @@
+{
+  "name": "Dino Runner",
+  "short_name": "Dino Runner",
+  "description": "A minimal level-based endless runner — clear each level's finish line, evolve your dino, and beat all 50 stages.",
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#F4F3F0",
+  "theme_color": "#E8552D",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

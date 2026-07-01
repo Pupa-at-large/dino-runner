@@ -1,0 +1,8 @@
+{
+  "appid": "wxYOURAPPID_PLACEHOLDER",
+  "projectname": "dino-runner",
+  "compileType": "game",
+  "setting": {
+    "es6": true
+  }
+}

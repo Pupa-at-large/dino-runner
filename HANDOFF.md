@@ -6,27 +6,30 @@ This document hands off the project to a new developer (or a cloud Claude Code s
 
 ## 1. What this is
 
-A minimal, level-based endless-runner game (Chrome-dino style) in **pure HTML + CSS + JavaScript**. No frameworks, no build step, no external assets, no dependencies. It runs by opening `index.html`. It is designed to deploy to GitHub Pages as a static site.
+A minimal, level-based endless-runner game (Chrome-dino style) in **pure HTML + CSS + JavaScript**. No frameworks, no build step, no dependencies (the only bundled binary assets are three self-hosted woff2 fonts and an SVG icon). It runs by opening `index.html`. It is designed to deploy to GitHub Pages as a static site.
 
-**Core loop:** a pixel dino auto-runs to the right; the player jumps over cacti and ducks under pterodactyls; each level has a finish line; clearing a level unlocks the next.
+**Core loop:** a flat-geometry dino auto-runs to the right; the player taps to jump (double-tap = double jump) over cacti and swipes down to duck under pterodactyls; each level has a finish line; clearing a level unlocks the next and evolves the dino.
+
+> **Visual system:** the look (colour tokens, type, glyph geometry, the 10 evolution forms, screens, day/night, effects) follows the Design Cloud spec in **`docs/design/DESIGN_SPEC.md`** — the single source of truth for visuals. `game.js` reproduces its flat geometry (rounded rects + triangles) on canvas. Two-token day/night invert with a constant orange accent `#E8552D`.
 
 ---
 
 ## 2. Current state (what works today)
 
-- One-input play: tap / click / space / ↑ to jump; hold / ↓ to duck.
-- Variable jump height (hold to jump higher — gravity is halved during the rising phase while held).
-- **8 levels**, each with a distance-based finish line (a checkered flag).
-- **Progress bar** above the canvas showing how far the dino is from the flag.
-- **Level-clear screen** ("Level cleared") that pauses the game; player taps "Next level" to continue.
-- **Level select** screen reachable from the title; cleared levels are unlocked permanently.
-- **Per-level difficulty ramp**: start speed, max speed, and how early pterodactyls appear all scale with level number.
-- **Persistence** via `localStorage`: highest unlocked level, best score per level, sound on/off.
-- **Day/night color inversion** at the level's midpoint (cosmetic milestone).
-- **Synthesized sound** (WebAudio blips + a clear fanfare) — no audio files. Toggleable.
-- **Responsive + crisp**: canvas scales to its container and is DPR-aware. Respects iOS safe areas, dark mode, and prevents page scroll/zoom on mobile.
+- **Whole-screen controls (DESIGN_SPEC §6):** tap anywhere = jump; **tap again mid-air = double jump** (extra height); swipe-down / long-press = duck (held stays ducked). Desktop: space/↑ jump, ↓ duck, Esc/P pause. No on-screen game buttons.
+- **Double-jump gate:** small cacti clear with one jump; **tall cacti require the double jump**. (Replaces the old hold-to-jump-higher model.)
+- **50 hand-authored levels.** Each is a *designed* obstacle score (not random), a compact pattern string expanded into an ordered schedule. Spacing is normalized to the level's top speed, so patterns are speed-invariant and always passable. Each ends with a distance-based finish line.
+- **10-stage evolution ladder (DESIGN_SPEC §8).** A new form unlocks every 5 levels: 角蛋 → 破壳 → 幼龙 → 少年龙 → 角龙 → 背鳍龙 → 双角龙 → 烈焰龙 → 王者龙 → 巨龙. Drawn from flat geometry; scale ramps .58→1.18 and **the hitbox scales with the form**. A **Forms** screen lets the player wear any unlocked form; "newest" follows progress automatically.
+- **Day/night every ~1200 world units:** full-screen invert flash + accent-pulse ring + a DAY/NIGHT toast + a speed surge (capped at the level's maxSpeed). Constant orange accent so danger stays legible.
+- **Effects (DESIGN_SPEC §4):** takeoff/landing dust, jump-arc accent trail, "+10" score pops, invert flash. All gated by reduced-motion.
+- **Screens:** title, HUD, level-clear (announces new forms), level-select (scrollable 50), Forms, **Pause** (resume/restart/settings/home), **Settings** (sound, reduce-motion, reset progress). Milestone is an in-canvas toast (non-blocking).
+- **Typography:** self-hosted **Space Grotesk** (UI) + **Space Mono** (numbers), in `fonts/`.
+- **Persistence** via `localStorage`: highest unlocked level, best score per level, chosen form, sound, reduce-motion override.
+- **Synthesized sound** (WebAudio blips + fanfare) — no audio files. Toggleable.
+- **PWA**: `manifest.json` + service worker (`sw.js`) cache the app shell (incl. fonts) → installable + offline.
+- **Accessibility**: `prefers-reduced-motion` (toggleable in Settings) drops strobe/particles/transitions; focus-visible rings; keyboard-navigable.
+- **Responsive + crisp**: DPR-aware canvas; iOS safe areas; dark mode chooses the starting day/night phase; prevents page scroll/zoom.
 - **Auto-pause** when the tab is backgrounded.
-- Landed/ground dust particles, death flash feedback.
 
 ---
 
@@ -34,13 +37,17 @@ A minimal, level-based endless-runner game (Chrome-dino style) in **pure HTML + 
 
 ```
 dino-runner/
-├── index.html      # Markup: HUD, progress bar, canvas, 3 overlays (title / clear / level-select), control buttons
-├── style.css       # Mobile-first styles, CSS variables for theming, dark-mode via prefers-color-scheme
+├── index.html      # Markup: HUD, progress bar, canvas, overlays (title/clear/select/forms/pause/settings)
+├── style.css       # Mobile-first styles, @font-face, colour tokens, dark-mode + reduced-motion
 ├── game.js         # The whole engine — see architecture below
+├── manifest.json   # PWA metadata (installable)
+├── sw.js           # Service worker — offline app-shell cache
+├── icon.svg        # App / home-screen icon
+├── fonts/          # Self-hosted woff2: Space Grotesk (variable) + Space Mono 400/700
+├── docs/design/    # Design Cloud handoff: DESIGN_SPEC.md (source of truth) + standalone preview
 ├── README.md       # Player-facing + deploy instructions
 ├── HANDOFF.md      # This file
-├── LICENSE         # MIT
-└── .gitignore
+└── LICENSE         # MIT
 ```
 
 There is intentionally no `package.json`, bundler, or transpiler. Keep it that way unless a feature genuinely requires it.
@@ -52,10 +59,10 @@ There is intentionally no `package.json`, bundler, or transpiler. Keep it that w
 It's a single IIFE (`(function(){ "use strict"; ... })()`) to avoid polluting globals. Sections, top to bottom:
 
 1. **DOM refs** — all `getElementById` lookups cached once.
-2. **Levels** — `TOTAL_LEVELS` and `levelConfig(n)`. This is the single source of difficulty truth. Each level returns `{ goal, startSpeed, maxSpeed, birdFrom }`:
-   - `goal` — world distance to the finish line.
-   - `startSpeed` / `maxSpeed` — scroll speed bounds for that level.
-   - `birdFrom` — fraction of the level (0–1) before flying obstacles can appear.
+2. **Levels** — `TOTAL_LEVELS` (50), `levelConfig(n)` (speed envelope: `startSpeed`/`maxSpeed`/`accel`), and `LEVEL_PATTERNS` (one authored string per level). `buildSchedule(pattern, maxSpeed)` expands a pattern into `{ items, goal }`:
+   - Tokens: `c` small cactus · `C` big cactus · `2` double · `3` triple · `b` bird; spacers `.` small · `-` medium · `~` large gap (space ignored).
+   - Spacing is expressed in **jump units** (`u = ~max-airtime-frames × maxSpeed`), so the same pattern feels identical at any speed and an implicit `1.0u` gap between obstacles guarantees a land-and-rejump window. This replaced the old random `spawn()` and `birdFrom`.
+   - `goal` is derived from where the pattern ends (plus lead-in/out padding).
 3. **Logical resolution** — the game world is computed in a fixed logical width (`BASE_W = 720`); `BASE_H` is derived from the container's aspect ratio on resize. All gameplay math uses these logical coords; the canvas transform scales them to physical pixels.
 4. **`theme()`** — returns the active color set (`fg/bg/mid/line/accent`), accounting for OS dark mode AND the in-level night inversion. Colors are re-read each frame so theme changes apply live.
 5. **State** — physics constants (`GRAV`, `JUMP_V`, `MAX_FALL`), the `dino` object, the `obstacles / clouds / particles` arrays, and run vars (`speed, dist, score, level, state`). `state` is a string state machine: `ready | play | clear | over | select`.
@@ -65,9 +72,9 @@ It's a single IIFE (`(function(){ "use strict"; ... })()`) to avoid polluting gl
 9. **Level lifecycle** — `loadLevel(n)` (reset for level n), `startLevel(n)`, `clearLevel()`, `failLevel()`.
 10. **Overlay helpers** — `hideAllOverlays()` / `showOverlay(el)`.
 11. **Input** — `jump()`, `releaseJump()`, `setDuck()`. Keyboard + pointer events both route here.
-12. **`spawn()`** — random obstacle generation. Picks cactus (single/cluster, small/big) or bird, gated by `birdFrom`. **This is currently random; see gaps.**
-13. **`update()`** — the per-frame simulation: advance distance/score, apply gravity, move obstacles/clouds/particles, spawn the finish flag near the end, run AABB collision, detect level clear. The finish flag is `type:"finish"` and is treated as a goal trigger, not a hazard.
-14. **`render()`** — draws everything each frame: background, moon (night), clouds, ground, obstacles, particles, dino. The dino/cacti/birds/flag are drawn with `fillRect` primitives (no sprites).
+12. **`spawnDue()`** — pulls scheduled obstacles onto the stage as their world position reaches the right edge (replaces the old random `spawn()`). World-distance based, so spacing is exact and frame-rate independent. Birds use one duck-height lane.
+13. **`update()`** — the per-frame simulation: advance distance/score, apply gravity, move obstacles/clouds/particles, pull due obstacles, spawn the finish flag near the end, run AABB collision, detect level clear. The finish flag is `type:"finish"` and is treated as a goal trigger, not a hazard.
+14. **`render()` + evolution ladder** — draws everything each frame. The dino is drawn by the active stage's `draw(c)` from the `EVOLUTIONS` array (`drawDino` dispatches via `effectiveStage()`); grown-up forms share `dinoForm(c, opt)` (scale + optional spikes/horn/accent), egg forms have their own helpers. All forms use `fillRect` in `fg`/`bg`, so dark mode and night inversion still work. Cacti/birds/flag are also `fillRect`.
 15. **`loop()`** — `requestAnimationFrame`; only calls `update()` when `state === "play"`, always renders.
 16. **Level-select grid** — `buildGrid()` builds the 8-cell selector dynamically, marking locked/cleared.
 17. **Events + boot** — wires keyboard, pointer, buttons, resize, dark-mode change, visibility (auto-pause), then `loadLevel(1); resize(); render(); loop()`.
@@ -78,8 +85,11 @@ It's a single IIFE (`(function(){ "use strict"; ... })()`) to avoid polluting gl
 - **`GROUND` is recomputed on resize** (`BASE_H - GROUND_OFFSET`). Don't hardcode a ground Y.
 - **Collision skips the finish flag** — it's the goal. Don't add it to the hazard loop.
 - **`state` gates input**: jumping/ducking only act in the right states. New UI must set `state` correctly or input will leak (e.g. tapping the canvas behind an overlay).
-- **The canvas pointer handler early-returns during `clear`/`select`** so overlay buttons receive the tap instead of triggering a jump.
-- **localStorage keys**: `dino_unlocked`, `dino_best`, `dino_sound`. Keep these stable or migrate.
+- **The stage pointer handler ignores taps whose target is a `<button>`** (overlays live inside `#stage`, so a button's `pointerdown` would otherwise bubble down and trigger a jump/start before the button's own click — this was a latent bug). It also early-returns during `clear`/`select`/`skins`.
+- **localStorage keys**: `dino_unlocked`, `dino_best`, `dino_sound`, `dino_skin` (`"auto"` = always newest form, else a stage index), `dino_motion` (`reduce`/`full` override of the OS setting). Keep these stable or migrate.
+- **Hitbox scales with the form** (`dino.w/h` in `update()` derive from the active form's `scale` × `PXU`). The biggest form (巨龙) has the widest box, so jump timing is tightest there — keep that in mind when authoring levels or tuning the bot. Forms are defined in the `EVOLUTIONS` data table; geometry lives in `dinoBase` / `drawEgg` / `drawHatch` / `drawDinoOrnaments`.
+- **Glyphs are flat geometry**, not sprites: `rrect()` (rounded rect via arcTo) + `triBox()` (triangle from fractional points), reproducing the spec's px boxes proportionally. Everything draws in theme colours (`c.fg` body, `c.hot` accent, `c.eye`), so day/night invert is automatic.
+- **`?bot` debug hook**: opening the page with `?bot` exposes a read-only `window.__dino` (state, dino, obstacles, speed, jump/duck) for automated playtesting. Inert without the query param — no globals leak in normal play. A reactive auto-player using it lives in the repo's test notes; it clears all 50 levels.
 
 ---
 
@@ -98,13 +108,14 @@ It's a single IIFE (`(function(){ "use strict"; ... })()`) to avoid polluting gl
 
 Ordered roughly by value-to-effort. Pick up from here.
 
-1. **Hand-authored levels (high value).** `spawn()` is currently random. To make levels feel *designed* (e.g. level 3 = a dense cactus gauntlet, level 5 = all pterodactyls), replace random spawning with a per-level obstacle sequence — an array of `{ at: distance, type, ... }` entries that `update()` consumes in order. This is the biggest step from "procedural toy" to "real game". Keep random as a fallback/endless mode if desired.
-2. **Better art.** Replace the `fillRect` dino/cacti/birds with either a denser pixel grid or a small sprite sheet. If sprites: keep them monochrome-tintable so theme/night inversion still works, or add per-theme variants. (A separate Claude Design pass is planned for the visual system — see the prompt the team already has.)
-3. **PWA / installable + offline.** Add `manifest.json` + a service worker so it can be "added to home screen" and played offline — very fitting for a runner. Static-site-friendly, no backend.
-4. **Difficulty tuning.** Current per-level durations run ~6s (L1) → ~13s (L8). Validate this feels right; consider a guaranteed *minimum passable gap* check in spawning so fast levels never produce an impossible obstacle cluster.
-5. **Milestone feedback.** Short sound/flash at distance milestones within a level for extra game-feel.
-6. **Global leaderboard** (optional, scope-expanding). Would require a backend — breaks the pure-static constraint. Only if the product wants social.
-7. **Accessibility.** Add reduced-motion handling (`prefers-reduced-motion`) and ensure overlay buttons are fully keyboard-navigable.
+1. ✅ **Hand-authored levels (done).** 50 designed levels via `LEVEL_PATTERNS` + `buildSchedule`; random spawning removed. The speed-normalized "jump unit" gives a built-in minimum-passable-gap guarantee. An optional endless/random mode could be added back if wanted.
+2. **Better art (in progress — Design Cloud).** The 10 evolution forms are placeholder `fillRect` art, intentionally monochrome-tintable so theme/night inversion works. A separate Design pass owns the real visual system; drop sprites/denser pixel grids into the `EVOLUTIONS[i].draw` hooks, keeping them tintable (or add per-theme variants).
+3. ✅ **PWA / installable + offline (done).** `manifest.json` + `sw.js` (versioned app-shell cache) + `icon.svg`. Bump `CACHE` in `sw.js` when shell files change.
+4. ✅ **Difficulty tuning (done, validate by feel).** Per-level spacing auto-scales to `maxSpeed`, so no level can spawn an impossible cluster. The speed curve (`levelConfig`) is gentle L1→L50; play-test the back half and tune `LEVEL_PATTERNS` / `levelConfig` if it feels off.
+5. ✅ **Milestone feedback (basic, done).** Soft blip at the level midpoint + a "new form unlocked" callout on clear. Could add more distance milestones.
+6. **Food / collectibles (deferred).** Was scoped out this round. A `type:"food"` non-hazard pickup (eaten on overlap, +score, munch fx) would add rhythm to patterns and fit the "eats as it grows" narrative — a natural next gameplay layer.
+7. **Global leaderboard** (optional, scope-expanding). Would require a backend — breaks the pure-static constraint. Only if the product wants social.
+8. ✅ **Accessibility (done).** `prefers-reduced-motion` disables strobe/particles/transitions; overlay buttons are keyboard-navigable `<button>`s with focus-visible rings. Further: ARIA live-region for level/score, fuller screen-reader pass.
 
 ---
 
@@ -140,8 +151,9 @@ Then enable GitHub Pages: **Settings → Pages → Source: deploy from branch �
 
 ## 9. Quick orientation for a cloud Claude Code session
 
-- Start by reading `game.js` top-to-bottom once — it's ~350 lines and self-contained.
-- The difficulty/level knobs you'll most likely touch are all in `levelConfig(n)` and `TOTAL_LEVELS` at the top.
-- To add designed levels, the change is localized to `spawn()` + a new per-level data table consumed in `update()`.
+- Start by reading `game.js` top-to-bottom once — it's self-contained (single IIFE).
+- The knobs you'll most likely touch: `LEVEL_PATTERNS` (level design), `levelConfig(n)` (speed curve), `buildSchedule` constants (global pacing), and `EVOLUTIONS` (forms).
+- To tweak a level, edit its pattern string. To add a new form, add an `EVOLUTIONS` entry with a `from` level and a `draw(c)`.
 - Don't introduce a build system or dependencies unless a feature truly requires it; the project's value is its zero-dependency simplicity.
 - Test on a narrow viewport (≤400px) and with the OS in dark mode — both are supported and easy to regress.
+- For automated playtesting, open with `?bot` and drive `window.__dino` (see gotchas).
